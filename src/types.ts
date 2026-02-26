@@ -1,3 +1,13 @@
+export type Role = 'admin' | 'guru';
+
+export type User = {
+  id: string;
+  username: string;
+  password?: string;
+  name: string;
+  role: Role;
+};
+
 export type AttendanceStatus = 'present' | 'sick' | 'permission' | 'absent';
 
 export type Attendance = {
@@ -9,6 +19,8 @@ export type Attendance = {
 
 export type JournalEntry = {
   id: string;
+  teacherId: string;
+  teacherName: string;
   date: string;
   startTime: string;
   endTime: string;

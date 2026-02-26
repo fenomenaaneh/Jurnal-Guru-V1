@@ -1,21 +1,32 @@
 import { ReactNode } from 'react';
-import { Home, PlusCircle, BookOpen, ClipboardCheck, Users, Star } from 'lucide-react';
+import { Home, PlusCircle, BookOpen, ClipboardCheck, Users, Star, LogOut, Shield, Activity } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { User } from '../types';
 
 type LayoutProps = {
   children: ReactNode;
   activeTab: string;
   onTabChange: (tab: string) => void;
+  user: User;
+  onLogout: () => void;
 };
 
-export function Layout({ children, activeTab, onTabChange }: LayoutProps) {
-  const tabs = [
+export function Layout({ children, activeTab, onTabChange, user, onLogout }: LayoutProps) {
+  const guruTabs = [
     { id: 'dashboard', label: 'Beranda', icon: Home },
     { id: 'history', label: 'Riwayat', icon: BookOpen },
     { id: 'add', label: 'Isi Jurnal', icon: PlusCircle },
     { id: 'penilaian', label: 'Penilaian', icon: Star },
     { id: 'students', label: 'Data Siswa', icon: Users },
   ];
+
+  const adminTabs = [
+    { id: 'admin-dashboard', label: 'Beranda', icon: Home },
+    { id: 'monitoring', label: 'Monitoring', icon: Activity },
+    { id: 'akun', label: 'Akun', icon: Shield },
+  ];
+
+  const tabs = user.role === 'admin' ? adminTabs : guruTabs;
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
@@ -49,14 +60,19 @@ export function Layout({ children, activeTab, onTabChange }: LayoutProps) {
           })}
         </nav>
         <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center space-x-3 px-4 py-2">
-            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm border border-indigo-200">
-              G
+          <div className="flex items-center justify-between px-4 py-2">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm border border-indigo-200 uppercase">
+                {user.name.charAt(0)}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-900 line-clamp-1">{user.name}</p>
+                <p className="text-xs text-slate-500 capitalize">{user.role}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-900">Guru Pengajar</p>
-              <p className="text-xs text-slate-500">NIP. 198001012005011001</p>
-            </div>
+            <button onClick={onLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </aside>
@@ -71,8 +87,13 @@ export function Layout({ children, activeTab, onTabChange }: LayoutProps) {
             </div>
             <h1 className="text-lg font-bold text-slate-900 tracking-tight">Jurnal Guru</h1>
           </div>
-          <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm border border-indigo-200">
-            G
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm border border-indigo-200 uppercase">
+              {user.name.charAt(0)}
+            </div>
+            <button onClick={onLogout} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 
