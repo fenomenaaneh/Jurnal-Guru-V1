@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Student } from '../hooks/useStudents';
-import { Users, Plus, Trash2, Search, Upload } from 'lucide-react';
+import { Users, Plus, Trash2, Search, Upload, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 type StudentsProps = {
   students: Student[];
@@ -64,49 +65,85 @@ export function Students({ students, onAdd, onAddStudents, onDelete, onDeleteCla
     }
   };
 
+  const handleDownloadTemplate = () => {
+    // Create worksheet data
+    const wsData = [
+      ['NIS', 'Nama Siswa'],
+      ['1001', 'Ahmad Budi'],
+      ['1002', 'Siti Aminah']
+    ];
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 15 }, // NIS
+      { wch: 30 }  // Nama Siswa
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Siswa');
+
+    // Generate Excel file and trigger download
+    XLSX.writeFile(wb, 'Template_Import_Siswa.xlsx');
+  };
+
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedClass) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-
-      const lines = text.split('\n');
-      const newStudents: Omit<Student, 'id'>[] = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Try to split by comma or semicolon
-        const separator = line.includes(';') ? ';' : ',';
-        const parts = line.split(separator);
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
         
-        if (parts.length >= 2) {
-          const nis = parts[0].trim();
-          const name = parts[1].trim();
-          
-          // Skip header row if it exists
-          if (nis.toLowerCase() === 'nis' || name.toLowerCase() === 'nama' || name.toLowerCase() === 'nama siswa') continue;
-
-          newStudents.push({
-            nis,
-            name,
-            className: selectedClass
-          });
+        // Assume first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        
+        if (jsonData.length <= 1) {
+          alert('File Excel kosong atau hanya berisi header.');
+          return;
         }
-      }
 
-      if (newStudents.length > 0) {
-        onAddStudents(newStudents);
-        alert(`Berhasil mengimpor ${newStudents.length} siswa ke kelas ${selectedClass}`);
-      } else {
-        alert('Format CSV tidak valid atau kosong. Gunakan format: NIS,Nama');
+        const newStudents: Omit<Student, 'id'>[] = [];
+        
+        // Start from index 1 to skip header
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length < 2) continue;
+          
+          const nis = String(row[0]).trim();
+          const name = String(row[1]).trim();
+          
+          if (nis && name) {
+            newStudents.push({
+              nis,
+              name,
+              className: selectedClass
+            });
+          }
+        }
+
+        if (newStudents.length > 0) {
+          onAddStudents(newStudents);
+          alert(`Berhasil mengimpor ${newStudents.length} siswa ke kelas ${selectedClass}`);
+        } else {
+          alert('Tidak ada data siswa yang valid ditemukan dalam file Excel.');
+        }
+      } catch (error) {
+        console.error('Error importing Excel:', error);
+        alert('Terjadi kesalahan saat membaca file Excel. Pastikan format file benar.');
       }
     };
-    reader.readAsText(file);
+    
+    reader.readAsArrayBuffer(file);
     
     // Reset input
     if (fileInputRef.current) {
@@ -183,18 +220,35 @@ export function Students({ students, onAdd, onAddStudents, onDelete, onDeleteCla
                   <Plus className="w-4 h-4 mr-1.5 text-indigo-600" />
                   Tambah Siswa Baru
                 </h3>
-                <label className="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center bg-indigo-50 px-2 py-1 rounded-md transition-colors">
-                  <Upload className="w-3 h-3 mr-1" />
-                  Import CSV
+              </div>
+              
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="flex-1 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  Template Excel
+                </button>
+                <label className="flex-1 cursor-pointer flex items-center justify-center text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+                  <Upload className="w-3.5 h-3.5 mr-1.5" />
+                  Import Excel
                   <input 
                     type="file" 
-                    accept=".csv" 
+                    accept=".xlsx, .xls" 
                     className="hidden" 
                     onChange={handleImport} 
                     ref={fileInputRef}
                   />
                 </label>
               </div>
+
+              <div className="relative flex items-center py-2 mb-4">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink-0 mx-4 text-xs text-slate-400 uppercase font-medium">Atau input manual</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
               <form onSubmit={handleAdd} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">NIS</label>
