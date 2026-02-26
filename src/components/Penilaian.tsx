@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Users, BookOpen, Save, CheckCircle2, Star, Calculator } from 'lucide-react';
+import { Users, BookOpen, Save, CheckCircle2, Star, Calculator, Download } from 'lucide-react';
 import { Student } from '../hooks/useStudents';
 import { JournalEntry } from '../types';
 import { format, parseISO } from 'date-fns';
@@ -104,6 +104,36 @@ export function Penilaian({ students, journals, onUpdateJournal }: PenilaianProp
 
     return result;
   }, [classStudents, classJournals]);
+
+  const handleDownloadCSV = () => {
+    if (classStudents.length === 0) return;
+
+    const headers = ['No', 'Nama Siswa', 'Jumlah Nilai', 'Rata-rata'];
+    const rows = classStudents.map((student, index) => {
+      const data = semesterGrades[student.id];
+      return [
+        index + 1,
+        student.name,
+        data.count,
+        data.average > 0 ? data.average : '-'
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Rekap_Nilai_Semester_${selectedClass}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="space-y-6">

@@ -33,5 +33,6 @@ export type JournalEntry = {
   absentStudentNames?: string;
   grades?: Record<string, number>;
   notes: string;
+  photoUrl?: string;
   createdAt: string;
 };

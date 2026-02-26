@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { JournalEntry, AttendanceStatus } from '../types';
-import { Save, X, Calendar, Clock, BookOpen, Users, FileText, CheckCircle2, XCircle, AlertCircle, Clock as ClockIcon } from 'lucide-react';
+import { Save, X, Calendar, Clock, BookOpen, Users, FileText, CheckCircle2, XCircle, AlertCircle, Clock as ClockIcon, Camera, Image as ImageIcon } from 'lucide-react';
 import { Student } from '../hooks/useStudents';
 
 type JournalFormProps = {
@@ -23,6 +23,8 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
   });
 
   const [studentAttendance, setStudentAttendance] = useState<Record<string, AttendanceStatus>>({});
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter students by selected class
   const classStudents = students.filter(s => s.className === formData.className);
@@ -39,6 +41,17 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleStudentAttendanceChange = (studentId: string, status: AttendanceStatus) => {
@@ -84,6 +97,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
       attendance: calculateTotalAttendance(),
       studentAttendance,
       absentStudentNames: absentNames,
+      photoUrl,
     });
   };
 
@@ -342,6 +356,46 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
               <p className="text-sm text-slate-500">Belum ada siswa di kelas ini.</p>
             </div>
           )}
+        </div>
+
+        <hr className="border-slate-100" />
+
+        {/* Foto Pembelajaran */}
+        <div className="space-y-6">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center">
+            <Camera className="w-4 h-4 mr-2 text-slate-400" />
+            Foto Pembelajaran
+          </h3>
+          <div>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handlePhotoUpload}
+            />
+            {photoUrl ? (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200">
+                <img src={photoUrl} alt="Foto Pembelajaran" className="w-full h-48 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl(undefined)}
+                  className="absolute top-2 right-2 p-1.5 bg-white/80 backdrop-blur-sm rounded-lg text-slate-700 hover:text-rose-600 hover:bg-white transition-colors shadow-sm"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-32 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+              >
+                <ImageIcon className="w-8 h-8 mb-2 text-slate-400" />
+                <span className="text-sm font-medium">Klik untuk upload foto kegiatan</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <hr className="border-slate-100" />

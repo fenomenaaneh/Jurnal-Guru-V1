@@ -135,7 +135,7 @@ export default function App() {
             </div>
           )}
           {activeTab === 'monitoring' && (
-            <Monitoring journals={journals} />
+            <Monitoring journals={journals} students={students} />
           )}
           {activeTab === 'akun' && (
             <Akun 
