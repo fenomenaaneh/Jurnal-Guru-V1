@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Home, PlusCircle, BookOpen, ClipboardCheck, Users } from 'lucide-react';
+import { Home, PlusCircle, BookOpen, ClipboardCheck, Users, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 type LayoutProps = {
@@ -13,7 +13,7 @@ export function Layout({ children, activeTab, onTabChange }: LayoutProps) {
     { id: 'dashboard', label: 'Beranda', icon: Home },
     { id: 'history', label: 'Riwayat', icon: BookOpen },
     { id: 'add', label: 'Isi Jurnal', icon: PlusCircle },
-    { id: 'presensi', label: 'Presensi', icon: ClipboardCheck },
+    { id: 'penilaian', label: 'Penilaian', icon: Star },
     { id: 'students', label: 'Data Siswa', icon: Users },
   ];
 

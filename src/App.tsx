@@ -8,14 +8,14 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { JournalForm } from './components/JournalForm';
 import { History } from './components/History';
-import { Presensi } from './components/Presensi';
+import { Penilaian } from './components/Penilaian';
 import { Students } from './components/Students';
 import { useJournals } from './hooks/useJournals';
 import { useStudents } from './hooks/useStudents';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { journals, addJournal, deleteJournal } = useJournals();
+  const { journals, addJournal, updateJournal, deleteJournal } = useJournals();
   const { students, addStudent, addStudents, deleteStudent, deleteClass } = useStudents();
 
   // Get unique classes from students
@@ -39,8 +39,12 @@ export default function App() {
           students={students}
         />
       )}
-      {activeTab === 'presensi' && (
-        <Presensi students={students} />
+      {activeTab === 'penilaian' && (
+        <Penilaian 
+          students={students} 
+          journals={journals} 
+          onUpdateJournal={updateJournal} 
+        />
       )}
       {activeTab === 'students' && (
         <Students 
