@@ -1,3 +1,5 @@
+export type AttendanceStatus = 'present' | 'sick' | 'permission' | 'absent';
+
 export type Attendance = {
   present: number;
   sick: number;
@@ -14,6 +16,7 @@ export type JournalEntry = {
   subject: string;
   topic: string;
   attendance: Attendance;
+  studentAttendance?: Record<string, AttendanceStatus>;
   notes: string;
   createdAt: string;
 };

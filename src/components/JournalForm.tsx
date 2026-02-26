@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { JournalEntry } from '../types';
-import { Save, X, Calendar, Clock, BookOpen, Users, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { JournalEntry, AttendanceStatus } from '../types';
+import { Save, X, Calendar, Clock, BookOpen, Users, FileText, CheckCircle2, XCircle, AlertCircle, Clock as ClockIcon } from 'lucide-react';
+import { Student } from '../hooks/useStudents';
 
 type JournalFormProps = {
   onSubmit: (entry: Omit<JournalEntry, 'id' | 'createdAt'>) => void;
   onCancel: () => void;
   classes: string[];
+  students: Student[];
 };
 
-export function JournalForm({ onSubmit, onCancel, classes }: JournalFormProps) {
+export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFormProps) {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     startTime: '07:00',
@@ -19,21 +21,45 @@ export function JournalForm({ onSubmit, onCancel, classes }: JournalFormProps) {
     notes: '',
   });
 
-  const [attendance, setAttendance] = useState({
-    present: 30,
-    sick: 0,
-    permission: 0,
-    absent: 0,
-  });
+  const [studentAttendance, setStudentAttendance] = useState<Record<string, AttendanceStatus>>({});
+
+  // Filter students by selected class
+  const classStudents = students.filter(s => s.className === formData.className);
+
+  // Initialize attendance when class changes
+  useEffect(() => {
+    const initialAttendance: Record<string, AttendanceStatus> = {};
+    classStudents.forEach(student => {
+      initialAttendance[student.id] = 'present';
+    });
+    setStudentAttendance(initialAttendance);
+  }, [formData.className, students]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleAttendanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setAttendance((prev) => ({ ...prev, [name]: parseInt(value) || 0 }));
+  const handleStudentAttendanceChange = (studentId: string, status: AttendanceStatus) => {
+    setStudentAttendance(prev => ({
+      ...prev,
+      [studentId]: status
+    }));
+  };
+
+  const calculateTotalAttendance = () => {
+    const totals: Record<AttendanceStatus, number> = {
+      present: 0,
+      sick: 0,
+      permission: 0,
+      absent: 0,
+    };
+
+    Object.values(studentAttendance).forEach(status => {
+      totals[status as AttendanceStatus]++;
+    });
+
+    return totals;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,11 +68,15 @@ export function JournalForm({ onSubmit, onCancel, classes }: JournalFormProps) {
       alert('Silakan pilih atau buat kelas terlebih dahulu di menu Data Siswa.');
       return;
     }
+    
     onSubmit({
       ...formData,
-      attendance,
+      attendance: calculateTotalAttendance(),
+      studentAttendance,
     });
   };
+
+  const attendanceTotals = calculateTotalAttendance();
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -171,56 +201,111 @@ export function JournalForm({ onSubmit, onCancel, classes }: JournalFormProps) {
 
         {/* Kehadiran */}
         <div className="space-y-6">
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center">
-            <Users className="w-4 h-4 mr-2 text-slate-400" />
-            Kehadiran Siswa
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
-              <label className="block text-sm font-medium text-emerald-800 mb-2">Hadir</label>
-              <input
-                type="number"
-                name="present"
-                min="0"
-                value={attendance.present}
-                onChange={handleAttendanceChange}
-                className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-emerald-900 font-bold"
-              />
-            </div>
-            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
-              <label className="block text-sm font-medium text-amber-800 mb-2">Sakit</label>
-              <input
-                type="number"
-                name="sick"
-                min="0"
-                value={attendance.sick}
-                onChange={handleAttendanceChange}
-                className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-amber-900 font-bold"
-              />
-            </div>
-            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-              <label className="block text-sm font-medium text-blue-800 mb-2">Izin</label>
-              <input
-                type="number"
-                name="permission"
-                min="0"
-                value={attendance.permission}
-                onChange={handleAttendanceChange}
-                className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-blue-900 font-bold"
-              />
-            </div>
-            <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100">
-              <label className="block text-sm font-medium text-rose-800 mb-2">Alpa</label>
-              <input
-                type="number"
-                name="absent"
-                min="0"
-                value={attendance.absent}
-                onChange={handleAttendanceChange}
-                className="w-full px-3 py-2 bg-white border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors text-rose-900 font-bold"
-              />
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center">
+              <Users className="w-4 h-4 mr-2 text-slate-400" />
+              Kehadiran Siswa
+            </h3>
+            <div className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              Total: {classStudents.length} Siswa
             </div>
           </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col items-center justify-center">
+              <span className="text-sm font-medium text-emerald-800 mb-1">Hadir</span>
+              <span className="text-2xl font-bold text-emerald-600">{attendanceTotals.present}</span>
+            </div>
+            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100 flex flex-col items-center justify-center">
+              <span className="text-sm font-medium text-amber-800 mb-1">Sakit</span>
+              <span className="text-2xl font-bold text-amber-600">{attendanceTotals.sick}</span>
+            </div>
+            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex flex-col items-center justify-center">
+              <span className="text-sm font-medium text-blue-800 mb-1">Izin</span>
+              <span className="text-2xl font-bold text-blue-600">{attendanceTotals.permission}</span>
+            </div>
+            <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 flex flex-col items-center justify-center">
+              <span className="text-sm font-medium text-rose-800 mb-1">Alpa</span>
+              <span className="text-2xl font-bold text-rose-600">{attendanceTotals.absent}</span>
+            </div>
+          </div>
+
+          {/* Student List */}
+          {classStudents.length > 0 ? (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 font-medium w-12 text-center">No</th>
+                    <th className="px-4 py-3 font-medium">Nama Siswa</th>
+                    <th className="px-4 py-3 font-medium text-center">Kehadiran</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {classStudents.map((student, index) => (
+                    <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 text-slate-500 text-center">{index + 1}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{student.name}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleStudentAttendanceChange(student.id, 'present')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              studentAttendance[student.id] === 'present'
+                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Hadir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudentAttendanceChange(student.id, 'sick')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              studentAttendance[student.id] === 'sick'
+                                ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Sakit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudentAttendanceChange(student.id, 'permission')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              studentAttendance[student.id] === 'permission'
+                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Izin
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudentAttendanceChange(student.id, 'absent')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              studentAttendance[student.id] === 'absent'
+                                ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Alpa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+              <Users className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">Belum ada siswa di kelas ini.</p>
+            </div>
+          )}
         </div>
 
         <hr className="border-slate-100" />

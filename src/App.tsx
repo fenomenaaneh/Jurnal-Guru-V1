@@ -36,6 +36,7 @@ export default function App() {
           onSubmit={handleAddJournal} 
           onCancel={() => setActiveTab('dashboard')}
           classes={classes}
+          students={students}
         />
       )}
       {activeTab === 'presensi' && (
