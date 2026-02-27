@@ -330,6 +330,13 @@ export function Penilaian({ students, journals, onUpdateJournal }: PenilaianProp
                   <h3 className="text-sm font-bold text-slate-900">Rekap Nilai Semester</h3>
                   <p className="text-xs text-slate-500 mt-0.5">Rata-rata dari {classJournals.length} pertemuan</p>
                 </div>
+                <button
+                  onClick={handleDownloadCSV}
+                  className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download CSV
+                </button>
               </div>
 
               <div className="overflow-x-auto">

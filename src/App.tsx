@@ -64,6 +64,13 @@ export default function App() {
     setUser(null);
   };
 
+  const handleChangePassword = (newPassword: string) => {
+    if (user) {
+      updateUser(user.id, { password: newPassword });
+      setUser({ ...user, password: newPassword });
+    }
+  };
+
   if (!user) {
     return <Login users={users} onLogin={handleLogin} />;
   }
@@ -72,7 +79,13 @@ export default function App() {
   const guruJournals = journals.filter(j => j.teacherId === user.id);
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={handleLogout}>
+    <Layout 
+      activeTab={activeTab} 
+      onTabChange={setActiveTab} 
+      user={user} 
+      onLogout={handleLogout}
+      onChangePassword={handleChangePassword}
+    >
       {/* Guru Routes */}
       {user.role === 'guru' && (
         <>
