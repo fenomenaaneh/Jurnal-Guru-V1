@@ -14,6 +14,7 @@ import { Students } from './components/Students';
 import { Login } from './components/Login';
 import { Akun } from './components/Akun';
 import { Monitoring } from './components/Monitoring';
+import { Tugas } from './components/Tugas';
 import { useJournals } from './hooks/useJournals';
 import { useStudents } from './hooks/useStudents';
 import { useUsers } from './hooks/useUsers';
@@ -135,7 +136,7 @@ export default function App() {
               onUpdateJournal={updateJournal}
             />
           )}
-          {activeTab === 'rekapkehadiran' && (
+          {activeTab === 'rekap-kehadiran' && (
             <RekapKehadiran
               journals={guruJournals}
               students={students}
@@ -184,6 +185,9 @@ export default function App() {
               onDelete={deleteStudent}
               onDeleteClass={deleteClass}
             />
+          )}
+          {activeTab === 'tugas' && (
+            <Tugas users={users} students={students} />
           )}
           {activeTab === 'akun' && (
             <Akun

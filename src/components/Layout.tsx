@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect, FormEvent } from 'react';
-import { Home, PlusCircle, BookOpen, Users, Star, SquareUser, LogOut, Shield, Activity, KeyRound, Moon, Sun, ChevronUp, ChevronDown, X, Save } from 'lucide-react';
+import { Home, PlusCircle, BookOpen, Users, Star, LogOut, Shield, Activity, KeyRound, Moon, Sun, ChevronUp, ChevronDown, X, Save, ClipboardList, ClipboardCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User } from '../types';
 
@@ -48,21 +48,22 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
     }
   };
 
-  // Guru: tidak ada menu Data Siswa — siswa dikelola admin
+  // Guru tabs — ditambah Rekap Kehadiran
   const guruTabs = [
-    { id: 'dashboard',  label: 'Beranda',   icon: Home },
-    { id: 'history',    label: 'Riwayat',   icon: BookOpen },
-    { id: 'add',        label: 'Isi Jurnal', icon: PlusCircle },
-    { id: 'penilaian',  label: 'Penilaian', icon: Star },
-    { id: 'rekapkehadiran',  label: 'Kehadiran', icon: SquareUser },
+    { id: 'dashboard',        label: 'Beranda',         icon: Home },
+    { id: 'history',          label: 'Riwayat',         icon: BookOpen },
+    { id: 'add',              label: 'Isi Jurnal',      icon: PlusCircle },
+    { id: 'penilaian',        label: 'Penilaian',       icon: Star },
+    { id: 'rekap-kehadiran',  label: 'Rekap Hadir',     icon: ClipboardList },
   ];
 
-  // Admin: tambah Data Siswa
+  // Admin tabs
   const adminTabs = [
-    { id: 'admin-dashboard', label: 'Beranda',     icon: Home },
-    { id: 'monitoring',      label: 'Monitoring',  icon: Activity },
-    { id: 'students',        label: 'Data Siswa',  icon: Users },
-    { id: 'akun',            label: 'Akun',        icon: Shield },
+    { id: 'admin-dashboard', label: 'Beranda',    icon: Home },
+    { id: 'monitoring',      label: 'Monitoring', icon: Activity },
+    { id: 'students',        label: 'Data Siswa', icon: Users },
+    { id: 'tugas',           label: 'Tugas',      icon: ClipboardCheck },
+    { id: 'akun',            label: 'Akun',       icon: Shield },
   ];
 
   const tabs = user.role === 'admin' ? adminTabs : guruTabs;
@@ -95,29 +96,24 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
             <p className="text-[10px] text-slate-400 leading-tight">SMPN 21 Jambi</p>
           </div>
         </div>
-
         <nav className="flex-1 px-4 space-y-1.5 mt-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+              <button key={tab.id} onClick={() => onTabChange(tab.id)}
                 className={cn(
                   "flex items-center w-full px-4 py-3 rounded-xl transition-all duration-200",
                   isActive
                     ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-medium shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-slate-200"
-                )}
-              >
+                )}>
                 <Icon className={cn("w-5 h-5 mr-3", isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500")} />
                 {tab.label}
               </button>
             );
           })}
         </nav>
-
         <div className="p-4 border-t border-slate-200 dark:border-slate-700 relative">
           {isMenuOpen && (
             <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden z-50">
@@ -128,9 +124,7 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
                 </button>
                 <button onClick={toggleDarkMode}
                   className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
-                  {isDarkMode
-                    ? <><Sun className="w-4 h-4 mr-3 text-slate-400" />Mode Terang</>
-                    : <><Moon className="w-4 h-4 mr-3 text-slate-400" />Mode Gelap</>}
+                  {isDarkMode ? <><Sun className="w-4 h-4 mr-3 text-slate-400" />Mode Terang</> : <><Moon className="w-4 h-4 mr-3 text-slate-400" />Mode Gelap</>}
                 </button>
                 <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
                 <button onClick={onLogout}
@@ -151,9 +145,7 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
                 <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{user.role}</p>
               </div>
             </div>
-            {isMenuOpen
-              ? <ChevronDown className="w-4 h-4 text-slate-400" />
-              : <ChevronUp className="w-4 h-4 text-slate-400" />}
+            {isMenuOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
           </button>
         </div>
       </aside>
@@ -187,9 +179,7 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
                   </button>
                   <button onClick={toggleDarkMode}
                     className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
-                    {isDarkMode
-                      ? <><Sun className="w-4 h-4 mr-3 text-slate-400" />Mode Terang</>
-                      : <><Moon className="w-4 h-4 mr-3 text-slate-400" />Mode Gelap</>}
+                    {isDarkMode ? <><Sun className="w-4 h-4 mr-3 text-slate-400" />Mode Terang</> : <><Moon className="w-4 h-4 mr-3 text-slate-400" />Mode Gelap</>}
                   </button>
                   <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
                   <button onClick={onLogout}
@@ -203,7 +193,7 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
-          <div className={`mx-auto w-full ${activeTab === 'rekapkehadiran' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+          <div className="max-w-3xl mx-auto w-full">
             {children}
           </div>
         </div>
@@ -215,23 +205,19 @@ export function Layout({ children, activeTab, onTabChange, user, onLogout, onCha
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-
             if (tab.id === 'add') {
               return (
                 <div key={tab.id} className="relative w-full h-full flex justify-center">
-                  <button
-                    onClick={() => onTabChange(tab.id)}
+                  <button onClick={() => onTabChange(tab.id)}
                     className={cn(
                       "absolute -top-6 flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 border-4 border-slate-50 dark:border-slate-900",
                       isActive ? "bg-indigo-700 text-white" : "bg-slate-900 dark:bg-slate-700 text-white"
-                    )}
-                  >
+                    )}>
                     <Icon className="w-8 h-8" />
                   </button>
                 </div>
               );
             }
-
             return (
               <button key={tab.id} onClick={() => onTabChange(tab.id)}
                 className={cn(
