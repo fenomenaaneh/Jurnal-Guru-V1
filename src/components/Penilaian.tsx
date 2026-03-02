@@ -1,388 +1,349 @@
 import { useState, useMemo } from 'react';
-import { Users, BookOpen, Save, CheckCircle2, Star, Calculator, Download } from 'lucide-react';
-import { Student } from '../hooks/useStudents';
 import { JournalEntry } from '../types';
-import { format, parseISO } from 'date-fns';
-import { id } from 'date-fns/locale';
+import { Student } from '../hooks/useStudents';
+import { TugasGuru } from '../hooks/useTugas';
+import { Star, Download, Filter, Users, BookOpen, Info, ChevronDown } from 'lucide-react';
 
 type PenilaianProps = {
   students: Student[];
   journals: JournalEntry[];
-  onUpdateJournal: (id: string, updatedEntry: Partial<JournalEntry>) => void;
+  onUpdateJournal: (id: string, data: Partial<JournalEntry>) => void;
+  tugasGuru?: TugasGuru;
 };
 
-export function Penilaian({ students, journals, onUpdateJournal }: PenilaianProps) {
-  const [activeTab, setActiveTab] = useState<'harian' | 'semester'>('harian');
-  const [selectedClass, setSelectedClass] = useState('');
-  const [selectedJournalId, setSelectedJournalId] = useState('');
-  const [grades, setGrades] = useState<Record<string, number>>({});
+type GradeRecord = Record<string, Record<string, string>>; // studentId -> { journalId -> nilai }
+
+export function Penilaian({ students, journals, onUpdateJournal, tugasGuru }: PenilaianProps) {
+
+  // Ambil daftar kelas dari tugasGuru jika ada, fallback ke semua kelas dari jurnal
+  const availableKelas = useMemo(() => {
+    if (tugasGuru && (tugasGuru.kelas ?? []).length > 0) {
+      return (tugasGuru.kelas ?? []).map(k => k.namaKelas).sort();
+    }
+    return Array.from(new Set(students.map(s => s.className))).sort();
+  }, [tugasGuru, students]);
+
+  const hasTugas = tugasGuru && (tugasGuru.kelas ?? []).length > 0;
+
+  const [selectedKelas, setSelectedKelas] = useState<string>(availableKelas[0] ?? '');
+  const [selectedMapel, setSelectedMapel] = useState<string>('');
+  const [localGrades, setLocalGrades] = useState<GradeRecord>({});
   const [saved, setSaved] = useState(false);
 
-  // Get unique classes from students
-  const classes = Array.from(new Set(students.map(s => s.className))).sort();
+  // Mapel tersedia untuk kelas terpilih
+  const mapelOptions = useMemo(() => {
+    if (!tugasGuru) return [];
+    const kelasItem = (tugasGuru.kelas ?? []).find(k => k.namaKelas === selectedKelas);
+    return (kelasItem?.mapel ?? []).map(m => m.namaMapel);
+  }, [tugasGuru, selectedKelas]);
 
-  // If no class is selected but classes exist, select the first one
-  if (!selectedClass && classes.length > 0) {
-    setSelectedClass(classes[0]);
-  }
+  // Jurnal sesuai kelas & mapel
+  const filteredJournals = useMemo(() => {
+    return journals
+      .filter(j => {
+        const kelasMatch = j.className === selectedKelas;
+        const mapelMatch = selectedMapel ? j.subject === selectedMapel : true;
+        return kelasMatch && mapelMatch;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [journals, selectedKelas, selectedMapel]);
 
-  // Filter students by selected class
-  const classStudents = useMemo(() => {
-    return students.filter(s => s.className === selectedClass).sort((a, b) => a.name.localeCompare(b.name));
-  }, [students, selectedClass]);
+  // Siswa di kelas terpilih
+  const kelasStudents = useMemo(
+    () => students.filter(s => s.className === selectedKelas),
+    [students, selectedKelas]
+  );
 
-  // Filter journals by selected class
-  const classJournals = useMemo(() => {
-    return journals.filter(j => j.className === selectedClass).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [journals, selectedClass]);
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr + 'T00:00:00').toLocaleDateString('id-ID', {
+        day: '2-digit', month: 'short',
+      });
+    } catch { return dateStr; }
+  };
 
-  // If no journal is selected but journals exist for the class, select the first one
-  if (!selectedJournalId && classJournals.length > 0) {
-    setSelectedJournalId(classJournals[0].id);
-  } else if (selectedJournalId && !classJournals.find(j => j.id === selectedJournalId)) {
-    // If selected journal is not in the current class, reset
-    setSelectedJournalId(classJournals.length > 0 ? classJournals[0].id : '');
-  }
-
-  const selectedJournal = classJournals.find(j => j.id === selectedJournalId);
-
-  // Initialize grades when journal changes
-  useMemo(() => {
-    if (selectedJournal) {
-      setGrades(selectedJournal.grades || {});
-    } else {
-      setGrades({});
+  // Ambil nilai dari jurnal atau state lokal
+  const getGrade = (studentId: string, journalId: string): string => {
+    if (localGrades[studentId]?.[journalId] !== undefined) {
+      return localGrades[studentId][journalId];
     }
-    setSaved(false);
-  }, [selectedJournal]);
+    const journal = journals.find(j => j.id === journalId);
+    return (journal?.grades as Record<string, string>)?.[studentId] ?? '';
+  };
 
-  const handleGradeChange = (studentId: string, value: string) => {
-    const numValue = parseInt(value, 10);
-    setGrades(prev => {
-      const newGrades = { ...prev };
-      if (isNaN(numValue)) {
-        delete newGrades[studentId];
-      } else {
-        newGrades[studentId] = Math.min(100, Math.max(0, numValue));
-      }
-      return newGrades;
-    });
+  const handleGradeChange = (studentId: string, journalId: string, value: string) => {
+    // Hanya angka 0-100
+    const num = value.replace(/[^0-9]/g, '');
+    const clamped = num === '' ? '' : String(Math.min(100, Number(num)));
+    setLocalGrades(prev => ({
+      ...prev,
+      [studentId]: { ...(prev[studentId] ?? {}), [journalId]: clamped },
+    }));
     setSaved(false);
   };
 
   const handleSave = () => {
-    if (selectedJournalId) {
-      onUpdateJournal(selectedJournalId, { grades });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+    // Kelompokkan perubahan per jurnal
+    const byJournal: Record<string, Record<string, string>> = {};
+    for (const [studentId, byJournalId] of Object.entries(localGrades)) {
+      for (const [journalId, nilai] of Object.entries(byJournalId)) {
+        if (!byJournal[journalId]) byJournal[journalId] = {};
+        byJournal[journalId][studentId] = nilai;
+      }
     }
+
+    for (const [journalId, gradesMap] of Object.entries(byJournal)) {
+      const journal = journals.find(j => j.id === journalId);
+      if (!journal) continue;
+      const existing = (journal.grades as Record<string, string>) ?? {};
+      onUpdateJournal(journalId, { grades: { ...existing, ...gradesMap } });
+    }
+
+    setSaved(true);
+    setLocalGrades({});
+    setTimeout(() => setSaved(false), 3000);
   };
 
-  // Calculate semester grades
-  const semesterGrades = useMemo(() => {
-    const result: Record<string, { total: number; count: number; average: number }> = {};
-    
-    classStudents.forEach(student => {
-      result[student.id] = { total: 0, count: 0, average: 0 };
-    });
+  // Rata-rata nilai per siswa
+  const getAverage = (studentId: string): string => {
+    const values: number[] = [];
+    for (const j of filteredJournals) {
+      const g = getGrade(studentId, j.id);
+      if (g !== '') values.push(Number(g));
+    }
+    if (values.length === 0) return '-';
+    return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
+  };
 
-    classJournals.forEach(journal => {
-      if (journal.grades) {
-        Object.entries(journal.grades).forEach(([studentId, grade]) => {
-          if (result[studentId] && typeof grade === 'number') {
-            result[studentId].total += grade;
-            result[studentId].count += 1;
-          }
-        });
-      }
-    });
-
-    Object.keys(result).forEach(studentId => {
-      const data = result[studentId];
-      result[studentId].average = data.count > 0 ? Math.round(data.total / data.count) : 0;
-    });
-
-    return result;
-  }, [classStudents, classJournals]);
-
-  const handleDownloadCSV = () => {
-    if (classStudents.length === 0) return;
-
-    const headers = ['No', 'Nama Siswa', 'Jumlah Nilai', 'Rata-rata'];
-    const rows = classStudents.map((student, index) => {
-      const data = semesterGrades[student.id];
+  // Export CSV
+  const handleExportCSV = () => {
+    const header = ['No', 'NIS', 'Nama', ...filteredJournals.map(j => `${formatDate(j.date)} (${j.subject})`), 'Rata-rata'];
+    const rows = kelasStudents.map((s, i) => {
+      const avg = getAverage(s.id);
       return [
-        index + 1,
-        student.name,
-        data.count,
-        data.average > 0 ? data.average : '-'
+        i + 1,
+        s.nis,
+        s.name,
+        ...filteredJournals.map(j => getGrade(s.id, j.id) || '-'),
+        avg,
       ];
     });
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+    const csvContent = [header, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Rekap_Nilai_Semester_${selectedClass}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `penilaian-${selectedKelas}${selectedMapel ? '-' + selectedMapel : ''}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
+
+  const hasUnsaved = Object.keys(localGrades).length > 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col space-y-1">
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Penilaian Siswa</h2>
-        <p className="text-slate-500">Kelola nilai harian dan rekap nilai semester siswa.</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex space-x-2 border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('harian')}
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'harian'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-          }`}
-        >
-          <div className="flex items-center">
-            <Star className="w-4 h-4 mr-2" />
-            Penilaian Harian
-          </div>
-        </button>
-        <button
-          onClick={() => setActiveTab('semester')}
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'semester'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-          }`}
-        >
-          <div className="flex items-center">
-            <Calculator className="w-4 h-4 mr-2" />
-            Penilaian Semester
-          </div>
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Kelas</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Users className="h-4 w-4 text-slate-400" />
-            </div>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={classes.length === 0}
-              className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none disabled:opacity-50"
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <Star className="w-6 h-6 text-amber-500" />
+            Penilaian Siswa
+          </h2>
+          <p className="text-slate-500 text-sm mt-0.5">Input nilai per pertemuan berdasarkan jurnal mengajar.</p>
+        </div>
+        <div className="flex gap-2">
+          {hasUnsaved && (
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
             >
-              {classes.length > 0 ? (
-                classes.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))
-              ) : (
-                <option value="">Belum ada kelas</option>
-              )}
-            </select>
+              Simpan Nilai
+            </button>
+          )}
+          {filteredJournals.length > 0 && kelasStudents.length > 0 && (
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          )}
+        </div>
+      </div>
+
+      {saved && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+          ✓ Nilai berhasil disimpan
+        </div>
+      )}
+
+      {/* Filter */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-400" />
+          Filter
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Kelas */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Kelas</label>
+            {availableKelas.length > 0 ? (
+              <div className="relative">
+                <select
+                  value={selectedKelas}
+                  onChange={e => { setSelectedKelas(e.target.value); setSelectedMapel(''); }}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none"
+                >
+                  {availableKelas.map(k => <option key={k} value={k}>{k}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                {hasTugas ? 'Belum ada kelas di tugas.' : 'Belum ada kelas tersedia.'}
+              </div>
+            )}
+          </div>
+
+          {/* Mapel */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Mata Pelajaran</label>
+            {hasTugas && mapelOptions.length > 0 ? (
+              <div className="relative">
+                <select
+                  value={selectedMapel}
+                  onChange={e => setSelectedMapel(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none"
+                >
+                  <option value="">Semua Mata Pelajaran</option>
+                  {mapelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  value={selectedMapel}
+                  onChange={e => setSelectedMapel(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none"
+                >
+                  <option value="">Semua Mata Pelajaran</option>
+                  {Array.from(new Set(filteredJournals.map(j => j.subject))).filter(Boolean).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            )}
           </div>
         </div>
 
-        {activeTab === 'harian' && (
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Pertemuan (Jurnal)</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <BookOpen className="h-4 w-4 text-slate-400" />
-              </div>
-              <select
-                value={selectedJournalId}
-                onChange={(e) => setSelectedJournalId(e.target.value)}
-                disabled={classJournals.length === 0}
-                className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none disabled:opacity-50"
-              >
-                {classJournals.length > 0 ? (
-                  classJournals.map(j => (
-                    <option key={j.id} value={j.id}>
-                      {format(parseISO(j.date), 'dd MMM yyyy', { locale: id })} - {j.subject}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Belum ada jurnal</option>
-                )}
-              </select>
-            </div>
+        {/* Info stats */}
+        {selectedKelas && (
+          <div className="flex gap-4 text-xs text-slate-500 pt-1 border-t border-slate-100">
+            <span className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5" />
+              {kelasStudents.length} siswa
+            </span>
+            <span className="flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              {filteredJournals.length} pertemuan
+            </span>
           </div>
         )}
       </div>
 
-      {/* Content */}
-      {activeTab === 'harian' ? (
+      {/* Tabel nilai */}
+      {kelasStudents.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+          <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500 font-medium">Belum ada siswa di kelas ini.</p>
+        </div>
+      ) : filteredJournals.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+          <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500 font-medium">Belum ada jurnal untuk kelas{selectedMapel ? ` / ${selectedMapel}` : ''} ini.</p>
+          <p className="text-slate-400 text-sm mt-1">Isi jurnal terlebih dahulu di menu Isi Jurnal.</p>
+        </div>
+      ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {classJournals.length === 0 ? (
-            <div className="p-8 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <BookOpen className="w-8 h-8 text-slate-400" />
-              </div>
-              <p className="text-slate-500 font-medium">Belum ada jurnal untuk kelas ini.</p>
-              <p className="text-sm text-slate-400 mt-1">Silakan isi jurnal terlebih dahulu untuk memberikan penilaian.</p>
-            </div>
-          ) : classStudents.length === 0 ? (
-            <div className="p-8 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <Users className="w-8 h-8 text-slate-400" />
-              </div>
-              <p className="text-slate-500 font-medium">Belum ada siswa di kelas ini.</p>
-            </div>
-          ) : (
-            <>
-              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Input Nilai Harian</h3>
-                  {selectedJournal && (
-                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{selectedJournal.topic}</p>
-                  )}
-                </div>
-                <button
-                  onClick={handleSave}
-                  className={`inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                    saved
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                  }`}
-                >
-                  {saved ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Tersimpan
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Simpan Nilai
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-16 text-center">No</th>
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Nama Siswa</th>
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 text-center">Nilai (0-100)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {classStudents.map((student, index) => (
-                      <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-slate-500 text-center">{index + 1}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs mr-3">
-                              {student.name.charAt(0)}
-                            </div>
-                            <span className="text-sm font-medium text-slate-900">{student.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50 w-8">No</th>
+                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sticky left-8 bg-slate-50 min-w-[160px]">Nama Siswa</th>
+                  {filteredJournals.map(j => (
+                    <th key={j.id} className="px-2 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[80px]">
+                      <div>{formatDate(j.date)}</div>
+                      {j.subject && <div className="font-normal text-slate-400 normal-case truncate max-w-[80px]">{j.subject}</div>}
+                    </th>
+                  ))}
+                  <th className="px-3 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider min-w-[80px]">Rata-rata</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {kelasStudents.map((student, idx) => (
+                  <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs text-center sticky left-0 bg-white">{idx + 1}</td>
+                    <td className="px-3 py-2.5 sticky left-8 bg-white">
+                      <p className="font-semibold text-slate-900">{student.name}</p>
+                      <p className="text-xs text-slate-400">{student.nis}</p>
+                    </td>
+                    {filteredJournals.map(j => {
+                      const val = getGrade(student.id, j.id);
+                      const num = val === '' ? null : Number(val);
+                      const colorClass = num === null ? '' :
+                        num >= 75 ? 'text-emerald-700' :
+                        num >= 60 ? 'text-amber-700' : 'text-rose-700';
+                      return (
+                        <td key={j.id} className="px-2 py-2.5 text-center">
                           <input
                             type="number"
                             min="0"
                             max="100"
-                            value={grades[student.id] !== undefined ? grades[student.id] : ''}
-                            onChange={(e) => handleGradeChange(student.id, e.target.value)}
-                            className="w-full px-3 py-2 text-center border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium text-slate-900"
-                            placeholder="-"
+                            value={val}
+                            onChange={e => handleGradeChange(student.id, j.id, e.target.value)}
+                            placeholder="—"
+                            className={`w-16 text-center px-2 py-1.5 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-sm font-semibold transition-colors ${colorClass}`}
                           />
                         </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {classStudents.length === 0 ? (
-            <div className="p-8 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <Users className="w-8 h-8 text-slate-400" />
-              </div>
-              <p className="text-slate-500 font-medium">Belum ada siswa di kelas ini.</p>
-            </div>
-          ) : (
-            <>
-              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Rekap Nilai Semester</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Rata-rata dari {classJournals.length} pertemuan</p>
-                </div>
-                <button
-                  onClick={handleDownloadCSV}
-                  className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download CSV
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-16 text-center">No</th>
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Nama Siswa</th>
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 text-center">Jml Nilai</th>
-                      <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 text-center">Rata-rata</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {classStudents.map((student, index) => {
-                      const data = semesterGrades[student.id];
-                      return (
-                        <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium text-slate-500 text-center">{index + 1}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center">
-                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs mr-3">
-                                {student.name.charAt(0)}
-                              </div>
-                              <span className="text-sm font-medium text-slate-900">{student.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className="text-sm font-medium text-slate-600">{data.count}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-sm font-bold ${
-                              data.average >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                              data.average >= 60 ? 'bg-amber-100 text-amber-700' :
-                              data.average > 0 ? 'bg-rose-100 text-rose-700' :
-                              'bg-slate-100 text-slate-500'
-                            }`}>
-                              {data.average > 0 ? data.average : '-'}
-                            </span>
-                          </td>
-                        </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                    <td className="px-3 py-2.5 text-center">
+                      {(() => {
+                        const avg = getAverage(student.id);
+                        const num = avg === '-' ? null : Number(avg);
+                        return (
+                          <span className={`text-sm font-bold ${
+                            num === null ? 'text-slate-400' :
+                            num >= 75 ? 'text-emerald-700' :
+                            num >= 60 ? 'text-amber-700' : 'text-rose-700'
+                          }`}>{avg}</span>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {hasUnsaved && (
+            <div className="px-5 py-4 border-t border-slate-100 bg-amber-50 flex items-center justify-between">
+              <p className="text-sm text-amber-700 font-medium">⚠ Ada nilai yang belum disimpan</p>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+              >
+                Simpan Sekarang
+              </button>
+            </div>
           )}
         </div>
       )}
