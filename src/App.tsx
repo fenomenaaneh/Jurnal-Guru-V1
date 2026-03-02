@@ -29,7 +29,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const { journals, loading: loadingJournals, error: errorJournals, addJournal, updateJournal, deleteJournal } = useJournals();
-  const { students, loading: loadingStudents, error: errorStudents, addStudent, addStudents, deleteStudent, deleteClass } = useStudents();
+  const { students, loading: loadingStudents, error: errorStudents, addStudent, addStudents, updateStudent, deleteStudent, deleteClass } = useStudents();
   const { users, loading: loadingUsers, error: errorUsers, addUser, updateUser, deleteUser } = useUsers();
   const { tugasList, loading: loadingTugas } = useTugas();
 
@@ -122,7 +122,7 @@ export default function App() {
       {user.role === 'guru' && (
         <>
           {activeTab === 'dashboard' && (
-            <Dashboard journals={guruJournals} onNavigate={setActiveTab} />
+            <Dashboard journals={guruJournals} onNavigate={setActiveTab} tugasGuru={tugasGuru} />
           )}
           {activeTab === 'add' && (
             <JournalForm
@@ -138,6 +138,7 @@ export default function App() {
               students={students}
               journals={guruJournals}
               onUpdateJournal={updateJournal}
+              tugasGuru={tugasGuru}
             />
           )}
           {activeTab === 'rekap-kehadiran' && (
@@ -186,6 +187,7 @@ export default function App() {
               students={students}
               onAdd={addStudent}
               onAddStudents={addStudents}
+              onUpdate={updateStudent}
               onDelete={deleteStudent}
               onDeleteClass={deleteClass}
             />

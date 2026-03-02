@@ -28,8 +28,27 @@ type EditState = {
 const totalJamGuru = (kelas: KelasItem[] | undefined) =>
   (kelas ?? []).reduce((a, k) => a + (k.mapel ?? []).reduce((b, m) => b + (m.jamPerMinggu ?? 0), 0), 0);
 
-const totalMapelGuru = (kelas: KelasItem[] | undefined) =>
-  (kelas ?? []).reduce((a, k) => a + (k.mapel ?? []).length, 0);
+// Hitung jumlah mapel unik dari seluruh kelas guru:
+// - Mapel yang sama di kelas berbeda = 1 (nama unik global)
+// - Lebih dari 1 entri mapel dengan nama sama di kelas yang sama = tetap 1
+const totalMapelGuru = (kelas: KelasItem[] | undefined) => {
+  const namaUnikGlobal = new Set(
+    (kelas ?? []).flatMap(k => (k.mapel ?? []).map(m => m.namaMapel)).filter(Boolean)
+  );
+  return namaUnikGlobal.size;
+};
+
+// Hitung pertemuan unik per kelas: mapel yang sama (nama sama) dianggap 1 pertemuan.
+// Juga: jika ada lebih dari 1 mapel dalam seminggu, tetap dihitung 1 pertemuan per kelas.
+const totalPertemuanUnik = (kelas: KelasItem[] | undefined) =>
+  (kelas ?? []).reduce((a, k) => {
+    // Ambil nama mapel unik per kelas → tiap kelas = 1 pertemuan (1 sesi belajar)
+    const namaUnik = new Set((k.mapel ?? []).map(m => m.namaMapel));
+    // Pertemuan per kelas = max pertemuanPerMinggu dari semua mapel di kelas itu
+    const maxPPM = (k.mapel ?? []).reduce((mx, m) => Math.max(mx, m.pertemuanPerMinggu ?? 1), 0);
+    // Jika ada mapel berbeda, tiap mapel unik tetap 1 slot, tapi kelas dianggap 1 unit pertemuan
+    return a + (namaUnik.size > 0 ? maxPPM : 0);
+  }, 0);
 
 // ── Komponen baris mapel dalam satu kelas ─────────────────────────────────────
 function MapelRow({
@@ -318,6 +337,7 @@ export function Tugas({ users, students }: TugasProps) {
             const isEditing  = editState?.guruId === guru.id;
             const jam        = totalJamGuru(tugasGuru?.kelas ?? []);
             const nKelas     = (tugasGuru?.kelas ?? []).length;
+            const nPertemuan = totalPertemuanUnik(tugasGuru?.kelas ?? []);
 
             return (
               <div key={guru.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -342,6 +362,9 @@ export function Tugas({ users, students }: TugasProps) {
                       <div className="hidden sm:flex items-center gap-2">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
                           <GraduationCap className="w-3 h-3" />{nKelas} Kelas
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                          <RefreshCw className="w-3 h-3" />{nPertemuan}× /Mgg
                         </span>
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
                           <Clock className="w-3 h-3" />{jam} Jam/Mgg
@@ -543,9 +566,9 @@ export function Tugas({ users, students }: TugasProps) {
                             ))}
 
                             {/* Total keseluruhan */}
-                            <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
+                            <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100 flex-wrap gap-2">
                               <div className="text-xs font-bold text-indigo-700">
-                                Total: {totalMapelGuru(tugasGuru.kelas ?? [])} mapel · {nKelas} kelas
+                                Total: {totalMapelGuru(tugasGuru.kelas ?? [])} mapel · {nKelas} kelas · {nPertemuan}× pertemuan/minggu
                               </div>
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-black bg-indigo-100 text-indigo-700">
                                 <Clock className="w-3.5 h-3.5" />{jam} jam/minggu

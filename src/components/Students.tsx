@@ -1,366 +1,340 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Student } from '../hooks/useStudents';
-import { Users, Plus, Trash2, Search, Upload, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import {
+  Users, Plus, Trash2, Pencil, X, Check, Upload,
+  ChevronDown, ChevronUp, Search, AlertCircle,
+} from 'lucide-react';
 
 type StudentsProps = {
   students: Student[];
   onAdd: (student: Omit<Student, 'id'>) => void;
   onAddStudents: (students: Omit<Student, 'id'>[]) => void;
+  onUpdate: (id: string, data: Partial<Student>) => void;
   onDelete: (id: string) => void;
   onDeleteClass: (className: string) => void;
 };
 
-export function Students({ students, onAdd, onAddStudents, onDelete, onDeleteClass }: StudentsProps) {
-  const [selectedClass, setSelectedClass] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [newStudent, setNewStudent] = useState({ name: '', nis: '' });
-  const [newClass, setNewClass] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+type EditForm = { name: string; nis: string; className: string };
 
-  // Get unique classes from students
-  const classes = Array.from(new Set(students.map(s => s.className))).sort();
+export function Students({
+  students, onAdd, onAddStudents, onUpdate, onDelete, onDeleteClass,
+}: StudentsProps) {
 
-  // If no class is selected but classes exist, select the first one
-  if (!selectedClass && classes.length > 0) {
-    setSelectedClass(classes[0]);
-  }
+  const [expandedClass, setExpandedClass] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
-  const filteredStudents = students.filter(
-    (s) =>
-      s.className === selectedClass &&
-      (s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.nis.includes(searchTerm))
-  );
+  const [addForm, setAddForm] = useState<EditForm>({ name: '', nis: '', className: '' });
+  const [addError, setAddError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStudent.name || !newStudent.nis || !selectedClass) return;
-    
-    onAdd({
-      name: newStudent.name,
-      nis: newStudent.nis,
-      className: selectedClass,
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name: '', nis: '', className: '' });
+  const [editError, setEditError] = useState('');
+
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    const map: Record<string, Student[]> = {};
+    students.forEach(s => {
+      if (!map[s.className]) map[s.className] = [];
+      map[s.className].push(s);
     });
-    
-    setNewStudent({ name: '', nis: '' });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  }, [students]);
+
+  const filteredGrouped = useMemo(() => {
+    if (!search.trim()) return grouped;
+    const q = search.toLowerCase();
+    return grouped
+      .map(([kls, list]) => [kls, list.filter(s =>
+        s.name.toLowerCase().includes(q) || s.nis.includes(q)
+      )] as [string, Student[]])
+      .filter(([, list]) => list.length > 0);
+  }, [grouped, search]);
+
+  const handleAdd = () => {
+    if (!addForm.name.trim()) { setAddError('Nama wajib diisi.'); return; }
+    if (!addForm.nis.trim())  { setAddError('NIS wajib diisi.'); return; }
+    if (!addForm.className.trim()) { setAddError('Kelas wajib diisi.'); return; }
+    onAdd({ name: addForm.name.trim(), nis: addForm.nis.trim(), className: addForm.className.trim() });
+    setAddForm({ name: '', nis: '', className: '' });
+    setAddError('');
+    setShowAddForm(false);
   };
 
-  const handleAddClass = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newClass.trim()) return;
-    
-    const className = newClass.trim();
-    if (!classes.includes(className)) {
-      setSelectedClass(className);
-    }
-    setNewClass('');
+  const startEdit = (s: Student) => {
+    setEditingId(s.id);
+    setEditForm({ name: s.name, nis: s.nis, className: s.className });
+    setEditError('');
   };
 
-  const handleDeleteClass = () => {
-    if (!selectedClass) return;
-    if (confirm(`Apakah Anda yakin ingin menghapus kelas ${selectedClass} beserta seluruh data siswanya?`)) {
-      onDeleteClass(selectedClass);
-      setSelectedClass('');
-    }
+  const cancelEdit = () => { setEditingId(null); setEditError(''); };
+
+  const saveEdit = (id: string) => {
+    if (!editForm.name.trim()) { setEditError('Nama wajib diisi.'); return; }
+    if (!editForm.nis.trim())  { setEditError('NIS wajib diisi.'); return; }
+    if (!editForm.className.trim()) { setEditError('Kelas wajib diisi.'); return; }
+    onUpdate(id, { name: editForm.name.trim(), nis: editForm.nis.trim(), className: editForm.className.trim() });
+    setEditingId(null);
+    setEditError('');
   };
 
-  const handleDownloadTemplate = () => {
-    // Create worksheet data
-    const wsData = [
-      ['NIS', 'Nama Siswa'],
-      ['1001', 'Ahmad Budi'],
-      ['1002', 'Siti Aminah']
-    ];
-
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 15 }, // NIS
-      { wch: 30 }  // Nama Siswa
-    ];
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'Template Siswa');
-
-    // Generate Excel file and trigger download
-    XLSX.writeFile(wb, 'Template_Import_Siswa.xlsx');
-  };
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedClass) return;
-
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Assume first sheet
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-        
-        if (jsonData.length <= 1) {
-          alert('File Excel kosong atau hanya berisi header.');
-          return;
-        }
-
-        const newStudents: Omit<Student, 'id'>[] = [];
-        
-        // Start from index 1 to skip header
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || row.length < 2) continue;
-          
-          const nis = String(row[0]).trim();
-          const name = String(row[1]).trim();
-          
-          if (nis && name) {
-            newStudents.push({
-              nis,
-              name,
-              className: selectedClass
-            });
-          }
-        }
-
-        if (newStudents.length > 0) {
-          onAddStudents(newStudents);
-          alert(`Berhasil mengimpor ${newStudents.length} siswa ke kelas ${selectedClass}`);
-        } else {
-          alert('Tidak ada data siswa yang valid ditemukan dalam file Excel.');
-        }
-      } catch (error) {
-        console.error('Error importing Excel:', error);
-        alert('Terjadi kesalahan saat membaca file Excel. Pastikan format file benar.');
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const imported: Omit<Student, 'id'>[] = [];
+      let skipped = 0;
+      const startIdx = isNaN(Number(lines[0]?.split(',')[0]?.trim())) ? 1 : 0;
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        let nis = '', name = '', className = '';
+        if (cols.length >= 4)      { [, nis, name, className] = cols; }
+        else if (cols.length === 3) { [nis, name, className] = cols; }
+        else { skipped++; continue; }
+        if (name && nis && className) { imported.push({ name, nis, className }); }
+        else { skipped++; }
       }
+      if (imported.length > 0) {
+        onAddStudents(imported);
+        setImportResult(`✓ ${imported.length} siswa berhasil diimport${skipped > 0 ? `, ${skipped} baris dilewati` : ''}.`);
+      } else {
+        setImportResult(`⚠ Tidak ada data valid. Format: NIS, Nama, Kelas.`);
+      }
+      setTimeout(() => setImportResult(null), 5000);
     };
-    
-    reader.readAsArrayBuffer(file);
-    
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    reader.readAsText(file);
+    e.target.value = '';
   };
+
+  const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 transition-colors';
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col space-y-1">
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Data Siswa</h2>
-        <p className="text-slate-500">Kelola daftar siswa untuk setiap kelas yang Anda ajar.</p>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <Users className="w-6 h-6 text-indigo-500" />
+            Data Siswa
+          </h2>
+          <p className="text-slate-500 text-sm mt-0.5">{students.length} siswa · {grouped.length} kelas</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 cursor-pointer transition-colors shadow-sm">
+            <Upload className="w-4 h-4" />
+            Import CSV
+            <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCSVImport} />
+          </label>
+          <button
+            onClick={() => setShowAddForm(v => !v)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Tambah Siswa
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Controls & Add Form */}
-        <div className="space-y-6">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-bold text-slate-900">Pilih Kelas</label>
-              {selectedClass && (
-                <button
-                  onClick={handleDeleteClass}
-                  className="text-xs text-rose-500 hover:text-rose-700 font-medium flex items-center"
-                >
-                  <Trash2 className="w-3 h-3 mr-1" />
-                  Hapus Kelas
-                </button>
-              )}
-            </div>
-            <div className="space-y-3">
-              {classes.length > 0 ? (
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Users className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <select
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-slate-50 font-medium text-slate-900"
-                  >
-                    {classes.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500 italic">Belum ada kelas.</p>
-              )}
+      {importResult && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
+          {importResult}
+        </div>
+      )}
 
-              <div className="pt-3 mt-3 border-t border-slate-100">
-                <label className="block text-xs font-medium text-slate-500 mb-2">Atau buat kelas baru</label>
-                <form onSubmit={handleAddClass} className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    placeholder="Nama kelas..."
-                    value={newClass}
-                    onChange={(e) => setNewClass(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newClass.trim()}
-                    className="w-full px-4 py-2 bg-indigo-50 text-indigo-600 font-medium text-sm rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50"
-                  >
-                    Tambah Kelas
-                  </button>
-                </form>
-              </div>
-            </div>
+      {/* Form tambah */}
+      {showAddForm && (
+        <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 space-y-3">
+          <h3 className="text-sm font-bold text-slate-800">Tambah Siswa Baru</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input className={inputCls} placeholder="Nama Lengkap *" value={addForm.name}
+              onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+            <input className={inputCls} placeholder="NIS *" value={addForm.nis}
+              onChange={e => setAddForm(f => ({ ...f, nis: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+            <input className={inputCls} placeholder="Kelas (cth: IX A) *" value={addForm.className}
+              onChange={e => setAddForm(f => ({ ...f, className: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              list="kelas-options" />
+            <datalist id="kelas-options">
+              {grouped.map(([k]) => <option key={k} value={k} />)}
+            </datalist>
           </div>
-
-          {selectedClass && (
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center">
-                  <Plus className="w-4 h-4 mr-1.5 text-indigo-600" />
-                  Tambah Siswa Baru
-                </h3>
-              </div>
-              
-              <div className="flex gap-2 mb-4">
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="flex-1 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  Template Excel
-                </button>
-                <label className="flex-1 cursor-pointer flex items-center justify-center text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
-                  <Upload className="w-3.5 h-3.5 mr-1.5" />
-                  Import Excel
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls" 
-                    className="hidden" 
-                    onChange={handleImport} 
-                    ref={fileInputRef}
-                  />
-                </label>
-              </div>
-
-              <div className="relative flex items-center py-2 mb-4">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink-0 mx-4 text-xs text-slate-400 uppercase font-medium">Atau input manual</span>
-                <div className="flex-grow border-t border-slate-200"></div>
-              </div>
-
-              <form onSubmit={handleAdd} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">NIS</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: 1001"
-                    value={newStudent.nis}
-                    onChange={(e) => setNewStudent({ ...newStudent, nis: e.target.value })}
-                    className="block w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Nama Lengkap</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Ahmad Budi"
-                    value={newStudent.name}
-                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                    className="block w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
-                >
-                  Simpan ke {selectedClass}
-                </button>
-              </form>
-            </div>
+          {addError && (
+            <p className="text-xs text-rose-500 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{addError}
+            </p>
           )}
-        </div>
-
-        {/* Right Column: Student List */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
-          <div className="p-5 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h3 className="text-base font-bold text-slate-900 flex items-center">
-              Daftar Siswa {selectedClass && <span className="text-indigo-600 ml-1">({filteredStudents.length})</span>}
-            </h3>
-            <div className="relative w-full sm:w-64">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Cari nama atau NIS..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={!selectedClass}
-                className="block w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white disabled:opacity-50"
-              />
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {!selectedClass ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                  <Users className="w-6 h-6 text-slate-400" />
-                </div>
-                <p className="text-sm font-medium text-slate-900">Pilih atau buat kelas terlebih dahulu</p>
-              </div>
-            ) : filteredStudents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                  <Users className="w-6 h-6 text-slate-400" />
-                </div>
-                <p className="text-sm font-medium text-slate-900">Belum ada data siswa</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Silakan tambahkan siswa untuk kelas {selectedClass} melalui form di samping.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10 shadow-sm">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">No</th>
-                    <th className="px-5 py-3 font-medium">NIS</th>
-                    <th className="px-5 py-3 font-medium">Nama Siswa</th>
-                    <th className="px-5 py-3 font-medium text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredStudents.map((student, index) => (
-                    <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-3 text-slate-500 w-12">{index + 1}</td>
-                      <td className="px-5 py-3 text-slate-500 font-mono text-xs w-24">{student.nis}</td>
-                      <td className="px-5 py-3 font-medium text-slate-900">{student.name}</td>
-                      <td className="px-5 py-3 text-right w-24">
-                        <button
-                          onClick={() => {
-                            if (confirm(`Hapus ${student.name} dari kelas ini?`)) {
-                              onDelete(student.id);
-                            }
-                          }}
-                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex"
-                          title="Hapus Siswa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setShowAddForm(false); setAddError(''); }}
+              className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50">
+              Batal
+            </button>
+            <button onClick={handleAdd}
+              className="px-4 py-2 text-sm bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700">
+              Simpan
+            </button>
           </div>
         </div>
+      )}
+
+      {/* Search */}
+      {students.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input type="text" placeholder="Cari nama atau NIS..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm text-slate-900" />
+        </div>
+      )}
+
+      {/* Daftar kelas */}
+      {filteredGrouped.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+          <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500 font-medium">
+            {students.length === 0 ? 'Belum ada data siswa.' : 'Tidak ada hasil pencarian.'}
+          </p>
+          {students.length === 0 && <p className="text-slate-400 text-sm mt-1">Klik "Tambah Siswa" atau import CSV.</p>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredGrouped.map(([kelas, list]) => {
+            const isOpen = expandedClass === kelas;
+            return (
+              <div key={kelas} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div
+                  className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-slate-50 transition-colors select-none"
+                  onClick={() => setExpandedClass(isOpen ? null : kelas)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
+                      <span className="text-xs font-black text-indigo-700">{list.length}</span>
+                    </div>
+                    <span className="font-bold text-slate-900">Kelas {kelas}</span>
+                    <span className="text-xs text-slate-400">{list.length} siswa</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (confirm(`Hapus semua ${list.length} siswa di kelas ${kelas}?`)) {
+                          onDeleteClass(kelas);
+                          if (expandedClass === kelas) setExpandedClass(null);
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                      title="Hapus seluruh kelas"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <div className="border-t border-slate-100 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-100">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-8">No</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nama Siswa</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">NIS</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Kelas</th>
+                          <th className="px-4 py-2.5 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {list.map((student, idx) => {
+                          const isEditing = editingId === student.id;
+                          return (
+                            <tr key={student.id} className={`transition-colors ${isEditing ? 'bg-indigo-50/60' : 'hover:bg-slate-50/50'}`}>
+                              <td className="px-4 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
+
+                              {isEditing ? (
+                                <>
+                                  <td className="px-3 py-2">
+                                    <input autoFocus className={inputCls} value={editForm.name}
+                                      onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                                      onKeyDown={e => e.key === 'Enter' && saveEdit(student.id)}
+                                      placeholder="Nama *" />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input className={inputCls} value={editForm.nis}
+                                      onChange={e => setEditForm(f => ({ ...f, nis: e.target.value }))}
+                                      onKeyDown={e => e.key === 'Enter' && saveEdit(student.id)}
+                                      placeholder="NIS *" />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input className={inputCls} value={editForm.className}
+                                      onChange={e => setEditForm(f => ({ ...f, className: e.target.value }))}
+                                      onKeyDown={e => e.key === 'Enter' && saveEdit(student.id)}
+                                      placeholder="Kelas *" list="kelas-options-edit" />
+                                    <datalist id="kelas-options-edit">
+                                      {grouped.map(([k]) => <option key={k} value={k} />)}
+                                    </datalist>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center justify-center gap-1.5 flex-col">
+                                      {editError && <span className="text-[10px] text-rose-500">{editError}</span>}
+                                      <div className="flex gap-1.5">
+                                        <button onClick={() => saveEdit(student.id)}
+                                          className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors" title="Simpan">
+                                          <Check className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={cancelEdit}
+                                          className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors" title="Batal">
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="px-4 py-2.5 font-medium text-slate-900">{student.name}</td>
+                                  <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{student.nis}</td>
+                                  <td className="px-4 py-2.5 text-slate-500">{student.className}</td>
+                                  <td className="px-4 py-2.5">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {/* Tombol Edit */}
+                                      <button onClick={() => startEdit(student)}
+                                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit siswa">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      {/* Tombol Hapus */}
+                                      <button
+                                        onClick={() => { if (confirm(`Hapus ${student.name}?`)) onDelete(student.id); }}
+                                        className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus siswa">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Info CSV */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 space-y-1">
+        <p className="font-semibold text-slate-600">Format Import CSV:</p>
+        <p>Kolom: <code className="bg-white px-1 rounded border border-slate-200">NIS, Nama, Kelas</code> atau <code className="bg-white px-1 rounded border border-slate-200">No, NIS, Nama, Kelas</code></p>
+        <p>Baris pertama boleh header, akan diabaikan otomatis.</p>
       </div>
     </div>
   );
