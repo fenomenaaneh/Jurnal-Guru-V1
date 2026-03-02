@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { JournalEntry, AttendanceStatus } from '../types';
-import { Save, X, Calendar, BookOpen, Users, FileText, Clock as ClockIcon, Camera, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { Save, X, Calendar, BookOpen, Users, FileText, Clock as ClockIcon, Camera, Image as ImageIcon, AlertCircle, Info } from 'lucide-react';
 import { Student } from '../hooks/useStudents';
+import { TugasGuru } from '../hooks/useTugas';
 
 type JournalFormProps = {
   onSubmit: (entry: Omit<JournalEntry, 'id' | 'createdAt'>) => void;
   onCancel: () => void;
   classes: string[];
   students: Student[];
+  tugasGuru?: TugasGuru;
 };
 
 const ATTENDANCE_OPTIONS: {
@@ -52,12 +54,39 @@ type FormErrors = {
   photo?: string;
 };
 
-export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFormProps) {
+export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }: JournalFormProps) {
+
+  // Kelas yang tersedia — dari tugas guru jika ada, fallback ke semua kelas
+  const availableKelas = useMemo(() => {
+    if (tugasGuru && (tugasGuru.kelas ?? []).length > 0) {
+      return (tugasGuru.kelas ?? []).map(k => k.namaKelas).sort();
+    }
+    return classes;
+  }, [tugasGuru, classes]);
+
+  // Mapel tersedia untuk kelas tertentu — dari tugas guru
+  const getMapelForKelas = (namaKelas: string): string[] => {
+    if (!tugasGuru) return [];
+    const kelasItem = (tugasGuru.kelas ?? []).find(k => k.namaKelas === namaKelas);
+    return Array.from(new Set((kelasItem?.mapel ?? []).map(m => m.namaMapel).filter(Boolean)));
+  };
+
+  const hasTugas = tugasGuru && (tugasGuru.kelas ?? []).length > 0;
+
+  // Gunakan tanggal lokal agar sesuai timezone guru (bukan UTC)
+  const getLocalDateString = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     startTime: '1',
     endTime: '2',
-    className: classes.length > 0 ? classes[0] : '',
+    className: availableKelas.length > 0 ? availableKelas[0] : '',
     subject: '',
     topic: '',
     learningObjective: '',
@@ -75,6 +104,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
   const photoRef = useRef<HTMLDivElement>(null);
 
   const classStudents = students.filter(s => s.className === formData.className);
+  const mapelOptions  = getMapelForKelas(formData.className);
 
   useEffect(() => {
     const initialAttendance: Record<string, AttendanceStatus> = {};
@@ -82,23 +112,27 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
     setStudentAttendance(initialAttendance);
   }, [formData.className, students]);
 
-  // Re-validate saat nilai berubah (hanya setelah pernah submit)
   useEffect(() => {
     if (submitted) validate();
   }, [formData.subject, formData.topic, photoUrl, submitted]);
 
   const validate = (): FormErrors => {
     const errs: FormErrors = {};
-    if (!formData.subject.trim()) errs.subject = 'Mata pelajaran wajib diisi.';
+    if (!formData.subject.trim()) errs.subject = 'Mata pelajaran wajib dipilih.';
     if (!formData.topic.trim())   errs.topic   = 'Topik / materi wajib diisi.';
     if (!photoUrl)                errs.photo   = 'Foto pembelajaran wajib diupload.';
     setErrors(errs);
     return errs;
   };
 
+  // Reset subject saat kelas berubah (mapelnya bisa berbeda)
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === 'className') {
+      setFormData(prev => ({ ...prev, className: value, subject: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,8 +227,21 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Tanggal</label>
-              <input type="date" name="date" required value={formData.date} onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900" />
+              <input
+                type="date"
+                name="date"
+                required
+                value={formData.date}
+                max={getLocalDateString()}
+                onChange={e => {
+                  // Tidak boleh pilih tanggal masa depan
+                  if (e.target.value <= getLocalDateString()) {
+                    handleChange(e);
+                  }
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900"
+              />
+              <p className="mt-1 text-[11px] text-slate-400">Hanya dapat memilih hari ini atau sebelumnya.</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Jam Mengajar (Ke-)</label>
@@ -222,35 +269,92 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Kelas — dari tugas guru */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Kelas</label>
-              <select name="className" required value={formData.className} onChange={handleChange} disabled={classes.length === 0}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none disabled:opacity-50">
-                {classes.length > 0
-                  ? classes.map(c => <option key={c} value={c}>{c}</option>)
-                  : <option value="">Belum ada kelas</option>}
-              </select>
-              {classes.length === 0 && <p className="mt-1 text-xs text-rose-500">Silakan tambahkan kelas di menu Data Siswa.</p>}
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Kelas <span className="text-rose-500">*</span>
+              </label>
+              {hasTugas ? (
+                <select
+                  name="className"
+                  value={formData.className}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none"
+                >
+                  {availableKelas.map(k => <option key={k} value={k}>{k}</option>)}
+                </select>
+              ) : (
+                <>
+                  <select
+                    name="className"
+                    value={formData.className}
+                    onChange={handleChange}
+                    disabled={availableKelas.length === 0}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none disabled:opacity-50"
+                  >
+                    {availableKelas.length > 0
+                      ? availableKelas.map(k => <option key={k} value={k}>{k}</option>)
+                      : <option value="">Belum ada kelas</option>}
+                  </select>
+                  {availableKelas.length === 0 && (
+                    <p className="mt-1 text-xs text-rose-500">Kelas belum tersedia. Hubungi Admin.</p>
+                  )}
+                </>
+              )}
             </div>
 
-            {/* Mata Pelajaran — WAJIB */}
+            {/* Mata Pelajaran — dropdown dari tugas guru */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Mata Pelajaran <span className="text-rose-500">*</span>
               </label>
-              <input
-                ref={subjectRef}
-                type="text"
-                name="subject"
-                placeholder="Contoh: Matematika"
-                value={formData.subject}
-                onChange={handleChange}
-                className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 ${errors.subject ? inputError : inputNormal}`}
-              />
-              {errors.subject && (
-                <p className="mt-1 text-xs text-rose-500 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />{errors.subject}
-                </p>
+              {hasTugas && mapelOptions.length > 0 ? (
+                <>
+                  <div className="relative">
+                    <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      name="subject"
+                      value={formData.subject}
+                      onChange={handleChange}
+                      className={`w-full pl-10 pr-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 appearance-none ${errors.subject ? inputError : inputNormal}`}
+                    >
+                      <option value="">-- Pilih Mata Pelajaran --</option>
+                      {mapelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  {errors.subject && (
+                    <p className="mt-1 text-xs text-rose-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />{errors.subject}
+                    </p>
+                  )}
+                </>
+              ) : hasTugas && mapelOptions.length === 0 ? (
+                <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <Info className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700">
+                    Belum ada mata pelajaran untuk kelas <strong>{formData.className}</strong>. Hubungi Admin untuk mengisi menu Tugas.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={subjectRef}
+                    type="text"
+                    name="subject"
+                    placeholder="Contoh: Matematika"
+                    value={formData.subject}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 ${errors.subject ? inputError : inputNormal}`}
+                  />
+                  <p className="mt-1 text-xs text-slate-400 flex items-center gap-1">
+                    <Info className="w-3 h-3" />Tugas mengajar belum diatur oleh Admin.
+                  </p>
+                  {errors.subject && (
+                    <p className="mt-1 text-xs text-rose-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />{errors.subject}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -435,7 +539,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students }: JournalFo
             className="px-6 py-2.5 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors">
             Batal
           </button>
-          <button type="submit" disabled={classes.length === 0}
+          <button type="submit" disabled={availableKelas.length === 0}
             className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
             <Save className="w-4 h-4 mr-2" />
             Simpan Jurnal

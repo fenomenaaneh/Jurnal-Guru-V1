@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { redis } from '../lib/Redis.ts';
+import { redis } from '../lib/redis';
 
 const STORAGE_KEY = 'jurnal-guru:users';
 

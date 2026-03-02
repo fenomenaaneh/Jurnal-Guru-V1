@@ -9,13 +9,16 @@ import { Dashboard } from './components/Dashboard';
 import { JournalForm } from './components/JournalForm';
 import { History } from './components/History';
 import { Penilaian } from './components/Penilaian';
+import { RekapKehadiran } from './components/RekapKehadiran';
 import { Students } from './components/Students';
 import { Login } from './components/Login';
 import { Akun } from './components/Akun';
 import { Monitoring } from './components/Monitoring';
+import { Tugas } from './components/Tugas';
 import { useJournals } from './hooks/useJournals';
 import { useStudents } from './hooks/useStudents';
 import { useUsers } from './hooks/useUsers';
+import { useTugas } from './hooks/useTugas';
 import { User } from './types';
 
 export default function App() {
@@ -26,10 +29,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const { journals, loading: loadingJournals, error: errorJournals, addJournal, updateJournal, deleteJournal } = useJournals();
-  const { students, loading: loadingStudents, error: errorStudents, addStudent, addStudents, deleteStudent, deleteClass } = useStudents();
+  const { students, loading: loadingStudents, error: errorStudents, addStudent, addStudents, updateStudent, deleteStudent, deleteClass } = useStudents();
   const { users, loading: loadingUsers, error: errorUsers, addUser, updateUser, deleteUser } = useUsers();
+  const { tugasList, loading: loadingTugas } = useTugas();
 
-  const isLoading = loadingJournals || loadingStudents || loadingUsers;
+  const isLoading = loadingJournals || loadingStudents || loadingUsers || loadingTugas;
   const errors = [errorJournals, errorStudents, errorUsers].filter(Boolean);
 
   useEffect(() => {
@@ -57,13 +61,8 @@ export default function App() {
     setActiveTab('history');
   };
 
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-  };
+  const handleLogin = (loggedInUser: User) => setUser(loggedInUser);
+  const handleLogout = () => setUser(null);
 
   const handleChangePassword = (newPassword: string) => {
     if (user) {
@@ -72,7 +71,6 @@ export default function App() {
     }
   };
 
-  // Tampilkan loading screen saat data pertama kali dimuat dari Redis
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
@@ -100,6 +98,7 @@ export default function App() {
   }
 
   const guruJournals = journals.filter(j => j.teacherId === user.id);
+  const tugasGuru = tugasList.find(t => t.guruId === user.id);
 
   return (
     <Layout
@@ -109,7 +108,6 @@ export default function App() {
       onLogout={handleLogout}
       onChangePassword={handleChangePassword}
     >
-      {/* Error banner */}
       {errors.length > 0 && (
         <div className="mb-4 space-y-2">
           {errors.map((err, i) => (
@@ -120,11 +118,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Guru Routes */}
+      {/* ── GURU ROUTES ── */}
       {user.role === 'guru' && (
         <>
           {activeTab === 'dashboard' && (
-            <Dashboard journals={guruJournals} onNavigate={setActiveTab} />
+            <Dashboard journals={guruJournals} onNavigate={setActiveTab} tugasGuru={tugasGuru} />
           )}
           {activeTab === 'add' && (
             <JournalForm
@@ -132,6 +130,7 @@ export default function App() {
               onCancel={() => setActiveTab('dashboard')}
               classes={classes}
               students={students}
+              tugasGuru={tugasGuru}
             />
           )}
           {activeTab === 'penilaian' && (
@@ -139,15 +138,14 @@ export default function App() {
               students={students}
               journals={guruJournals}
               onUpdateJournal={updateJournal}
+              tugasGuru={tugasGuru}
             />
           )}
-          {activeTab === 'students' && (
-            <Students
+          {activeTab === 'rekap-kehadiran' && (
+            <RekapKehadiran
+              journals={guruJournals}
               students={students}
-              onAdd={addStudent}
-              onAddStudents={addStudents}
-              onDelete={deleteStudent}
-              onDeleteClass={deleteClass}
+              teacherName={user.name}
             />
           )}
           {activeTab === 'history' && (
@@ -156,7 +154,7 @@ export default function App() {
         </>
       )}
 
-      {/* Admin Routes */}
+      {/* ── ADMIN ROUTES ── */}
       {user.role === 'admin' && (
         <>
           {activeTab === 'admin-dashboard' && (
@@ -183,6 +181,19 @@ export default function App() {
           )}
           {activeTab === 'monitoring' && (
             <Monitoring journals={journals} students={students} />
+          )}
+          {activeTab === 'students' && (
+            <Students
+              students={students}
+              onAdd={addStudent}
+              onAddStudents={addStudents}
+              onUpdate={updateStudent}
+              onDelete={deleteStudent}
+              onDeleteClass={deleteClass}
+            />
+          )}
+          {activeTab === 'tugas' && (
+            <Tugas users={users} students={students} />
           )}
           {activeTab === 'akun' && (
             <Akun

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { redis } from '../lib/Redis.ts';
+import { redis } from '../lib/redis';
 
 export type Student = {
   id: string;
