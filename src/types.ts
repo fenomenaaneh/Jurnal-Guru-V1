@@ -20,10 +20,13 @@ export type JournalEntry = {
   grades?: Record<string, string>; // studentId -> nilai (string angka 0-100)
 };
 
+
+export type Role = 'admin' | 'guru';
+
 export type User = {
   id: string;
   name: string;
   username: string;
   password: string;
-  role: 'admin' | 'guru';
+  role: Role;
 };
