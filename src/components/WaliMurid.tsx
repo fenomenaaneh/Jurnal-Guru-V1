@@ -164,7 +164,7 @@ export function WaliMurid({ students, journals, lockedKelas }: WaliMuridProps) {
   const buildPesanKehadiran = (student: Student): string => {
     const abs = getAbsensi(student.id);
     const wali = getWali(student.id);
-    const sapaan = wali?.namaOrtu ? `Yth. ${wali.namaOrtu},` : 'Yth. Bapak/Ibu Orang Tua/Wali,';
+    const sapaan = wali?.namaOrtu ? `Yth.Bapak/Ibu ${wali.namaOrtu},` : 'Yth. Bapak/Ibu Orang Tua/Wali,';
     return (
 `${sapaan}
 
@@ -187,7 +187,7 @@ _SMPN 21 Jambi_`
   // ── Buat pesan nilai ──────────────────────────────────────────────────────
   const buildPesanNilai = (student: Student): string => {
     const wali = getWali(student.id);
-    const sapaan = wali?.namaOrtu ? `Yth. ${wali.namaOrtu},` : 'Yth. Bapak/Ibu Orang Tua/Wali,';
+    const sapaan = wali?.namaOrtu ? `Yth.Bapak/Ibu ${wali.namaOrtu},` : 'Yth. Bapak/Ibu Orang Tua/Wali,';
     const nilaiLines = mapelList.map(m => {
       const val = getNilai(student.id, m);
       return `📚 ${m.padEnd(10)}: ${val}`;

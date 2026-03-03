@@ -12,6 +12,12 @@ type JournalFormProps = {
   tugasGuru?: TugasGuru;
 };
 
+// Daftar mapel standar — sama dengan di Tugas.tsx
+const DAFTAR_MAPEL = [
+  'PAI', 'PKN', 'B INDO', 'MTK', 'IPA',
+  'IPS', 'B ING', 'PJOK', 'TIK', 'PRAKARYA',
+];
+
 const ATTENDANCE_OPTIONS: {
   status: AttendanceStatus;
   label: string;
@@ -56,7 +62,6 @@ type FormErrors = {
 
 export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }: JournalFormProps) {
 
-  // Kelas yang tersedia — dari tugas guru jika ada, fallback ke semua kelas
   const availableKelas = useMemo(() => {
     if (tugasGuru && (tugasGuru.kelas ?? []).length > 0) {
       return (tugasGuru.kelas ?? []).map(k => k.namaKelas).sort();
@@ -64,7 +69,6 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
     return classes;
   }, [tugasGuru, classes]);
 
-  // Mapel tersedia untuk kelas tertentu — dari tugas guru
   const getMapelForKelas = (namaKelas: string): string[] => {
     if (!tugasGuru) return [];
     const kelasItem = (tugasGuru.kelas ?? []).find(k => k.namaKelas === namaKelas);
@@ -73,13 +77,9 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
 
   const hasTugas = tugasGuru && (tugasGuru.kelas ?? []).length > 0;
 
-  // Gunakan tanggal lokal agar sesuai timezone guru (bukan UTC)
   const getLocalDateString = () => {
     const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
   const [formData, setFormData] = useState({
@@ -98,8 +98,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const subjectRef = useRef<HTMLInputElement>(null);
+  const subjectRef = useRef<HTMLSelectElement>(null);
   const topicRef = useRef<HTMLTextAreaElement>(null);
   const photoRef = useRef<HTMLDivElement>(null);
 
@@ -125,7 +124,6 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
     return errs;
   };
 
-  // Reset subject saat kelas berubah (mapelnya bisa berbeda)
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'className') {
@@ -164,8 +162,6 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
     }
 
     const errs = validate();
-
-    // Scroll ke field pertama yang error
     if (errs.subject) {
       subjectRef.current?.focus();
       subjectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -200,8 +196,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
   };
 
   const attendanceTotals = calculateTotalAttendance();
-
-  const inputError = 'border-rose-400 bg-rose-50 focus:ring-rose-400 focus:border-rose-400';
+  const inputError  = 'border-rose-400 bg-rose-50 focus:ring-rose-400 focus:border-rose-400';
   const inputNormal = 'border-slate-200 bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500';
 
   return (
@@ -228,17 +223,9 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Tanggal</label>
               <input
-                type="date"
-                name="date"
-                required
-                value={formData.date}
+                type="date" name="date" required value={formData.date}
                 max={getLocalDateString()}
-                onChange={e => {
-                  // Tidak boleh pilih tanggal masa depan
-                  if (e.target.value <= getLocalDateString()) {
-                    handleChange(e);
-                  }
-                }}
+                onChange={e => { if (e.target.value <= getLocalDateString()) handleChange(e); }}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900"
               />
               <p className="mt-1 text-[11px] text-slate-400">Hanya dapat memilih hari ini atau sebelumnya.</p>
@@ -268,30 +255,23 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
               </div>
             </div>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Kelas — dari tugas guru */}
+            {/* Kelas */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Kelas <span className="text-rose-500">*</span>
               </label>
               {hasTugas ? (
-                <select
-                  name="className"
-                  value={formData.className}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none"
-                >
+                <select name="className" value={formData.className} onChange={handleChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none">
                   {availableKelas.map(k => <option key={k} value={k}>{k}</option>)}
                 </select>
               ) : (
                 <>
-                  <select
-                    name="className"
-                    value={formData.className}
-                    onChange={handleChange}
+                  <select name="className" value={formData.className} onChange={handleChange}
                     disabled={availableKelas.length === 0}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none disabled:opacity-50"
-                  >
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 appearance-none disabled:opacity-50">
                     {availableKelas.length > 0
                       ? availableKelas.map(k => <option key={k} value={k}>{k}</option>)
                       : <option value="">Belum ada kelas</option>}
@@ -303,19 +283,19 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
               )}
             </div>
 
-            {/* Mata Pelajaran — dropdown dari tugas guru */}
+            {/* Mata Pelajaran — selalu dropdown */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Mata Pelajaran <span className="text-rose-500">*</span>
               </label>
+
               {hasTugas && mapelOptions.length > 0 ? (
+                // Dari tugas guru (spesifik per kelas)
                 <>
                   <div className="relative">
                     <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     <select
-                      name="subject"
-                      value={formData.subject}
-                      onChange={handleChange}
+                      name="subject" value={formData.subject} onChange={handleChange}
                       className={`w-full pl-10 pr-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 appearance-none ${errors.subject ? inputError : inputNormal}`}
                     >
                       <option value="">-- Pilih Mata Pelajaran --</option>
@@ -328,26 +308,32 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
                     </p>
                   )}
                 </>
+
               ) : hasTugas && mapelOptions.length === 0 ? (
+                // Tugas ada tapi kelas ini belum diisi mapel
                 <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <Info className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-amber-700">
                     Belum ada mata pelajaran untuk kelas <strong>{formData.className}</strong>. Hubungi Admin untuk mengisi menu Tugas.
                   </p>
                 </div>
+
               ) : (
+                // Tidak ada tugas → pakai DAFTAR_MAPEL standar
                 <>
-                  <input
-                    ref={subjectRef}
-                    type="text"
-                    name="subject"
-                    placeholder="Contoh: Matematika"
-                    value={formData.subject}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 ${errors.subject ? inputError : inputNormal}`}
-                  />
+                  <div className="relative">
+                    <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      ref={subjectRef}
+                      name="subject" value={formData.subject} onChange={handleChange}
+                      className={`w-full pl-10 pr-4 py-2.5 border rounded-xl focus:ring-2 transition-colors text-slate-900 appearance-none ${errors.subject ? inputError : inputNormal}`}
+                    >
+                      <option value="">-- Pilih Mata Pelajaran --</option>
+                      {DAFTAR_MAPEL.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
                   <p className="mt-1 text-xs text-slate-400 flex items-center gap-1">
-                    <Info className="w-3 h-3" />Tugas mengajar belum diatur oleh Admin.
+                    <Info className="w-3 h-3" />Tugas mengajar belum diatur Admin, pilih dari daftar umum.
                   </p>
                   {errors.subject && (
                     <p className="mt-1 text-xs text-rose-500 flex items-center gap-1">
@@ -369,19 +355,14 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
             Materi Pembelajaran
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {/* Topik — WAJIB */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Topik / Materi <span className="text-rose-500">*</span>
               </label>
               <textarea
-                ref={topicRef}
-                name="topic"
-                rows={3}
+                ref={topicRef} name="topic" rows={3}
                 placeholder="Jelaskan materi yang diajarkan hari ini..."
-                value={formData.topic}
-                onChange={handleChange}
+                value={formData.topic} onChange={handleChange}
                 className={`w-full px-4 py-3 border rounded-xl focus:ring-2 transition-colors text-slate-900 resize-none ${errors.topic ? inputError : inputNormal}`}
               />
               {errors.topic && (
@@ -390,10 +371,11 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
                 </p>
               )}
             </div>
-
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Tujuan Pembelajaran</label>
-              <textarea name="learningObjective" rows={3} placeholder="Tujuan yang ingin dicapai pada pembelajaran ini..." value={formData.learningObjective} onChange={handleChange}
+              <textarea name="learningObjective" rows={3}
+                placeholder="Tujuan yang ingin dicapai pada pembelajaran ini..."
+                value={formData.learningObjective} onChange={handleChange}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 resize-none" />
             </div>
           </div>
@@ -474,7 +456,7 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
 
         <hr className="border-slate-100" />
 
-        {/* Foto Pembelajaran — WAJIB */}
+        {/* Foto Pembelajaran */}
         <div className="space-y-3" ref={photoRef}>
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center">
             <Camera className="w-4 h-4 mr-2 text-slate-400" />
@@ -515,11 +497,13 @@ export function JournalForm({ onSubmit, onCancel, classes, students, tugasGuru }
             <FileText className="w-4 h-4 mr-2 text-slate-400" />
             Catatan Tambahan
           </h3>
-          <textarea name="notes" rows={2} placeholder="Catatan khusus, evaluasi, atau kejadian penting..." value={formData.notes} onChange={handleChange}
+          <textarea name="notes" rows={2}
+            placeholder="Catatan khusus, evaluasi, atau kejadian penting..."
+            value={formData.notes} onChange={handleChange}
             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-900 resize-none" />
         </div>
 
-        {/* Ringkasan error di atas tombol simpan */}
+        {/* Ringkasan error */}
         {submitted && Object.keys(errors).length > 0 && (
           <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" />
