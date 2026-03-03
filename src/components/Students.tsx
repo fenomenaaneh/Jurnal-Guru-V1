@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { Student } from '../hooks/useStudents';
 import {
   Users, Plus, Trash2, Pencil, X, Check, Upload,
@@ -76,9 +77,8 @@ export function Students({
     setEditError('');
   };
 
-  // ── CSV parser — support UTF-8, UTF-8 BOM, dan Windows-1252 ───────────────
+  // ── CSV parser ─────────────────────────────────────────────────────────────
   const parseCSV = (text: string) => {
-    // Buang BOM jika ada
     const clean = text.replace(/^\uFEFF/, '');
     const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
     const imported: Omit<Student, 'id'>[] = [];
@@ -102,24 +102,72 @@ export function Students({
     setTimeout(() => setImportResult(null), 5000);
   };
 
-  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Excel parser ───────────────────────────────────────────────────────────
+  const parseExcel = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+        const imported: Omit<Student, 'id'>[] = [];
+        let skipped = 0;
+        const startIdx = isNaN(Number(String(rows[0]?.[0]).trim())) ? 1 : 0;
+
+        for (let i = startIdx; i < rows.length; i++) {
+          const cols = rows[i].map(c => String(c ?? '').trim());
+          let nis = '', name = '', className = '';
+          if (cols.length >= 4)       { [, nis, name, className] = cols; }
+          else if (cols.length === 3) { [nis, name, className] = cols; }
+          else { skipped++; continue; }
+          if (name && nis && className) {
+            imported.push({ name, nis, className });
+          } else {
+            skipped++;
+          }
+        }
+
+        if (imported.length > 0) {
+          onAddStudents(imported);
+          setImportResult(`✓ ${imported.length} siswa berhasil diimport dari Excel${skipped > 0 ? `, ${skipped} baris dilewati` : ''}.`);
+        } else {
+          setImportResult('⚠ Tidak ada data valid. Format kolom: NIS, Nama, Kelas (atau No, NIS, Nama, Kelas).');
+        }
+      } catch {
+        setImportResult('⚠ Gagal membaca file Excel. Pastikan format file benar.');
+      }
+      setTimeout(() => setImportResult(null), 5000);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ── Handler utama import ───────────────────────────────────────────────────
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      // Jika ada karakter pengganti (karakter rusak), coba Windows-1252
-      if (text.includes('\uFFFD')) {
-        const reader2 = new FileReader();
-        reader2.onload = (ev2) => parseCSV(ev2.target?.result as string);
-        reader2.readAsText(file, 'windows-1252');
-        return;
-      }
-      parseCSV(text);
-    };
-    // Baca dengan UTF-8 dulu (support BOM otomatis lewat parseCSV)
-    reader.readAsText(file, 'UTF-8');
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      parseExcel(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        if (text.includes('\uFFFD')) {
+          const reader2 = new FileReader();
+          reader2.onload = (ev2) => parseCSV(ev2.target?.result as string);
+          reader2.readAsText(file, 'windows-1252');
+          return;
+        }
+        parseCSV(text);
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
     e.target.value = '';
   };
 
@@ -140,8 +188,8 @@ export function Students({
         <div className="flex gap-2 flex-wrap">
           <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 cursor-pointer transition-colors shadow-sm">
             <Upload className="w-4 h-4" />
-            Import CSV
-            <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCSVImport} />
+            Import Excel / CSV
+            <input type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden" onChange={handleFileImport} />
           </label>
           <button
             onClick={() => setShowAddForm(v => !v)}
@@ -217,7 +265,7 @@ export function Students({
           <p className="text-slate-500 font-medium">
             {students.length === 0 ? 'Belum ada data siswa.' : 'Tidak ada hasil pencarian.'}
           </p>
-          {students.length === 0 && <p className="text-slate-400 text-sm mt-1">Klik "Tambah Siswa" atau import CSV.</p>}
+          {students.length === 0 && <p className="text-slate-400 text-sm mt-1">Klik "Tambah Siswa" atau import file Excel/CSV.</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -344,12 +392,12 @@ export function Students({
         </div>
       )}
 
-      {/* Info CSV */}
+      {/* Info format */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 space-y-1">
-        <p className="font-semibold text-slate-600">Format Import CSV:</p>
+        <p className="font-semibold text-slate-600">Format Import Excel / CSV:</p>
         <p>Kolom: <code className="bg-white px-1 rounded border border-slate-200">NIS, Nama, Kelas</code> atau <code className="bg-white px-1 rounded border border-slate-200">No, NIS, Nama, Kelas</code></p>
         <p>Baris pertama boleh header, akan diabaikan otomatis.</p>
-        <p className="text-slate-400">💡 Dari Excel: simpan sebagai <strong className="text-slate-500">CSV UTF-8 (dengan BOM)</strong> agar terbaca dengan benar.</p>
+        <p className="text-slate-400">💡 Bisa langsung upload file <strong className="text-slate-500">.xlsx</strong> dari Excel tanpa perlu save as CSV.</p>
       </div>
     </div>
   );
