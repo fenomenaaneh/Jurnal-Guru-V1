@@ -848,7 +848,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             <div className="px-5 py-4 bg-slate-50">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Preview Pesan (contoh untuk 1 ortu)</p>
               <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n📅 ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
+                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
               </div>
             </div>
           )}
