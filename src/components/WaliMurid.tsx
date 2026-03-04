@@ -284,7 +284,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     for (const student of allStudentsWithWa) {
       const wali = getWali(student.id)!;
       const sapa = wali.namaOrtu ? `Yth. Bapak/Ibu ${wali.namaOrtu},` : 'Yth. Bapak/Ibu Orang Tua/Wali,';
-      const pesan = `${sapa}\n\n📢 *Pengumuman Kedisiplinan Siswa*\n📅 ${today}\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`;
+      const pesan = `${sapa}\n\n📢 *Pengumuman Kedisiplinan Siswa*\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`;
       const result = await sendWhatsApp(fonnteToken, wali.noWa, pesan);
       if (result.success) ok++; else fail++;
       await new Promise(r => setTimeout(r, 1000));
@@ -442,7 +442,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             <div className="px-5 py-4 bg-slate-50 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Preview Pesan (contoh untuk 1 ortu)</p>
               <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n📅 ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
+                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
               </div>
             </div>
           )}
