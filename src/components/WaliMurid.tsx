@@ -308,6 +308,149 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     </div>
   );
 
+  // ── Admin: langsung tampil form Kedisiplinan saja ──────────────────────────
+  if (isAdmin) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Users className="w-6 h-6 text-amber-500" />
+              Kedisiplinan Siswa
+            </h2>
+            <p className="text-slate-500 text-sm mt-0.5">Kirim pengumuman kedisiplinan ke semua orang tua murid.</p>
+          </div>
+          {/* Token button */}
+          <button
+            onClick={() => setShowTokenForm(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${fonnteToken ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'}`}
+          >
+            <Settings className="w-4 h-4" />
+            {fonnteToken ? 'Fonnte ✓' : 'Atur Token WA'}
+          </button>
+        </div>
+
+        {/* Token form */}
+        {showTokenForm && (
+          <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Settings className="w-4 h-4 text-indigo-500" />Pengaturan Token Fonnte</h3>
+              <button onClick={() => setShowTokenForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-xs text-slate-500">Dapatkan token di <a href="https://fonnte.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">fonnte.com</a> → Dashboard → Device → Token.</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input type={showToken ? 'text' : 'password'} placeholder="Masukkan token Fonnte..." value={tokenInput} onChange={e => setTokenInput(e.target.value)} className={inputCls} />
+                <button type="button" onClick={() => setShowToken(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <button onClick={handleSaveToken} disabled={!tokenInput.trim()} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                <Save className="w-3.5 h-3.5" /> Simpan
+              </button>
+            </div>
+            {tokenSaved && <p className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Token berhasil disimpan!</p>}
+          </div>
+        )}
+
+        {/* Card utama kedisiplinan */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Info header */}
+          <div className="px-5 py-4 bg-amber-50 border-b border-amber-100 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Users className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Pesan Kedisiplinan ke Semua Orang Tua</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Pesan akan dikirim ke <span className="font-bold">{allStudentsWithWa.length} orang tua</span> yang sudah terdaftar nomor WA-nya (semua kelas).
+              </p>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="px-5 py-5 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Isi Pesan Kedisiplinan
+              </label>
+              <textarea
+                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-900 transition-colors resize-none"
+                rows={6}
+                placeholder={`Contoh:\nDiberitahukan kepada orang tua siswa bahwa akan dilaksanakan pemeriksaan kuku dan kerapian rambut pada hari Senin, 10 Maret 2026.\n\nMohon pastikan putra/putri Bapak/Ibu datang ke sekolah dalam kondisi rapi dan bersih.`}
+                value={disiplinMsg}
+                onChange={e => setDisiplinMsg(e.target.value)}
+                disabled={disiplinStatus === 'sending'}
+              />
+              <p className="text-xs text-slate-400 mt-1.5">
+                Pesan otomatis ditambahkan salam pembuka (nama ortu), tanggal, dan tanda tangan SMPN 21 Jambi.
+              </p>
+            </div>
+
+            {/* Tombol kirim */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={handleSendDisiplin}
+                disabled={!disiplinMsg.trim() || disiplinStatus === 'sending' || !fonnteToken || allStudentsWithWa.length === 0}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {disiplinStatus === 'sending'
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Mengirim ke {allStudentsWithWa.length} ortu...</>
+                  : <><Send className="w-4 h-4" />Kirim ke Semua Ortu ({allStudentsWithWa.length})</>
+                }
+              </button>
+              {disiplinMsg.trim() && disiplinStatus === 'idle' && (
+                <button onClick={() => setDisiplinMsg('')} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                  Hapus pesan
+                </button>
+              )}
+            </div>
+
+            {/* Tidak ada token */}
+            {!fonnteToken && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700">
+                <X className="w-4 h-4 flex-shrink-0" />
+                Token Fonnte belum diisi. Klik "Atur Token WA" di pojok kanan atas.
+              </div>
+            )}
+
+            {/* Tidak ada kontak */}
+            {allStudentsWithWa.length === 0 && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500">
+                <Users className="w-4 h-4 flex-shrink-0" />
+                Belum ada nomor WA ortu yang terdaftar. Minta wali kelas isi kontak di menu Wali Murid.
+              </div>
+            )}
+
+            {/* Hasil kirim */}
+            {disiplinResult && (
+              <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm border ${
+                disiplinResult.fail === 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'
+              }`}>
+                <CheckCheck className="w-4 h-4 flex-shrink-0" />
+                Selesai! <span className="font-bold">{disiplinResult.ok} berhasil</span> dikirim
+                {disiplinResult.fail > 0 && <>, <span className="font-bold text-rose-600">{disiplinResult.fail} gagal</span></>}.
+              </div>
+            )}
+          </div>
+
+          {/* Preview pesan */}
+          {disiplinMsg.trim() && (
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Preview Pesan (contoh untuk 1 ortu)</p>
+              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n📅 ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
 
