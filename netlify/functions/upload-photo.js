@@ -44,8 +44,8 @@ exports.handler = async function (event) {
 
     const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
     const signature = crypto
-      .createHmac('sha256', API_SECRET)
-      .update(paramsToSign)
+      .createHash('sha1')
+      .update(paramsToSign + API_SECRET)
       .digest('hex');
 
     const params = new URLSearchParams();
