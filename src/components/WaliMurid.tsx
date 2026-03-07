@@ -7,7 +7,7 @@ import {
   Phone, Users, BookOpen, Search, Save,
   ChevronDown, Star, CheckCircle2, Send,
   Settings, Eye, EyeOff, Loader2, X, CheckCheck,
-  CalendarDays, Clock,
+  CalendarDays, Clock, RefreshCw, UserCheck, GraduationCap,
 } from 'lucide-react';
 
 type WaliMuridProps = {
@@ -17,72 +17,59 @@ type WaliMuridProps = {
   isAdmin?: boolean;
 };
 
-type ActiveTab = 'kontak' | 'nilai' | 'kedisiplinan';
+// Tambah 'rekap-kelas' sebagai tab ketiga untuk guru wali kelas
+type ActiveTab = 'kontak' | 'nilai' | 'rekap-kelas';
 type PeriodeFilter = 'harian' | 'mingguan' | 'bulanan';
 type SendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 transition-colors';
 const FONNTE_TOKEN_KEY  = 'jurnal-guru:fonnte-token';
-const SENT_TS_KEY       = 'jurnal-guru:sent-ts';       // per-siswa timestamp
-const BULK_SENT_TS_KEY  = 'jurnal-guru:bulk-sent-ts';  // timestamp kirim-semua terakhir
-const SENT_LOCK_MS      = 15 * 60 * 1000;              // 15 menit
+const SENT_TS_KEY       = 'jurnal-guru:sent-ts';
+const BULK_SENT_TS_KEY  = 'jurnal-guru:bulk-sent-ts';
+const SENT_LOCK_MS      = 15 * 60 * 1000;
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
 function loadSentTs(): Map<string, number> {
   try {
     const raw = localStorage.getItem(SENT_TS_KEY);
     if (!raw) return new Map();
-    const parsed = JSON.parse(raw) as Record<string, number>;
-    return new Map<string, number>(Object.entries(parsed));
+    return new Map<string, number>(Object.entries(JSON.parse(raw) as Record<string, number>));
   } catch { return new Map<string, number>(); }
 }
-
 function saveSentTs(map: Map<string, number>) {
   try { localStorage.setItem(SENT_TS_KEY, JSON.stringify(Object.fromEntries(map))); } catch {}
 }
-
 function loadBulkSentTs(): number | null {
-  try {
-    const raw = localStorage.getItem(BULK_SENT_TS_KEY);
-    return raw ? Number(raw) : null;
-  } catch { return null; }
+  try { const raw = localStorage.getItem(BULK_SENT_TS_KEY); return raw ? Number(raw) : null; }
+  catch { return null; }
 }
-
 function saveBulkSentTs(ts: number) {
   try { localStorage.setItem(BULK_SENT_TS_KEY, String(ts)); } catch {}
 }
 
-// ── Helpers periode ────────────────────────────────────────────────────────────
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function getTodayStr() { return fmt(new Date()); }
-
 function getWeekRange() {
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const daysToMonday = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const monday = new Date(now); monday.setDate(now.getDate() - daysToMonday);
   const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
   const labelStart = monday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
   const labelEnd   = friday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
   return { start: fmt(monday), end: fmt(friday), label: `${labelStart} – ${labelEnd}` };
 }
-
 function getMonthRange() {
   const now   = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { start: fmt(start), end: fmt(end), label: now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) };
 }
-
 function getPeriodeLabelShort(p: PeriodeFilter) {
   if (p === 'harian')   return 'Hari Ini';
   if (p === 'mingguan') return 'Minggu Ini';
   return 'Bulan Ini';
 }
-
-/** Format sisa waktu lock, misal "12:34" */
 function formatCountdown(sentTs: number): string {
   const remaining = SENT_LOCK_MS - (Date.now() - sentTs);
   if (remaining <= 0) return '';
@@ -91,7 +78,6 @@ function formatCountdown(sentTs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// ── Fonnte sender ─────────────────────────────────────────────────────────────
 async function sendWhatsApp(token: string, noWa: string, message: string): Promise<{ success: boolean; reason?: string }> {
   try {
     const fd = new FormData();
@@ -101,9 +87,7 @@ async function sendWhatsApp(token: string, noWa: string, message: string): Promi
     const res  = await fetch('https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: token }, body: fd });
     const json = await res.json();
     return json.status === true ? { success: true } : { success: false, reason: json.reason ?? 'Gagal mengirim' };
-  } catch {
-    return { success: false, reason: 'Koneksi gagal' };
-  }
+  } catch { return { success: false, reason: 'Koneksi gagal' }; }
 }
 
 export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: WaliMuridProps) {
@@ -115,7 +99,6 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
   const [editMap,        setEditMap]        = useState<Record<string, { namaOrtu: string; noWa: string }>>({});
   const [savedIds,       setSavedIds]       = useState<Set<string>>(new Set());
   const [periodeFilter,  setPeriodeFilter]  = useState<PeriodeFilter>('mingguan');
-
   const [fonnteToken,    setFonnteToken]    = useState('');
   const [tokenInput,     setTokenInput]     = useState('');
   const [showToken,      setShowToken]      = useState(false);
@@ -124,24 +107,14 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
   const [sendStatusMap,  setSendStatusMap]  = useState<Record<string, SendStatus>>({});
   const [bulkStatus,     setBulkStatus]     = useState<'idle' | 'sending' | 'done'>('idle');
   const [bulkResult,     setBulkResult]     = useState<{ ok: number; fail: number } | null>(null);
-
-  // ── Per-siswa lock — persist di localStorage ──────────────────────────────
-  const [sentTsMap, setSentTsMap] = useState<Map<string, number>>(loadSentTs);
-
-  // ── Bulk send lock — persist di localStorage ─────────────────────────────
-  const [bulkSentTs, setBulkSentTs] = useState<number | null>(loadBulkSentTs);
-
-  // Countdown display (update setiap detik)
+  const [sentTsMap,      setSentTsMap]      = useState<Map<string, number>>(loadSentTs);
+  const [bulkSentTs,     setBulkSentTs]     = useState<number | null>(loadBulkSentTs);
   const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // ── State kedisiplinan ─────────────────────────────────────────────────────
   const [disiplinMsg,    setDisiplinMsg]    = useState('');
   const [disiplinStatus, setDisiplinStatus] = useState<'idle' | 'sending' | 'done'>('idle');
   const [disiplinResult, setDisiplinResult] = useState<{ ok: number; fail: number } | null>(null);
+
+  useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
 
   useEffect(() => {
     redis.get<string>(FONNTE_TOKEN_KEY).then(t => { if (t) { setFonnteToken(t); setTokenInput(t); } }).catch(() => {});
@@ -149,9 +122,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
 
   const handleSaveToken = async () => {
     await redis.set(FONNTE_TOKEN_KEY, tokenInput.trim());
-    setFonnteToken(tokenInput.trim());
-    setTokenSaved(true);
-    setShowTokenForm(false);
+    setFonnteToken(tokenInput.trim()); setTokenSaved(true); setShowTokenForm(false);
     setTimeout(() => setTokenSaved(false), 3000);
   };
 
@@ -162,7 +133,6 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     else if (!selectedKelas && kelasList.length > 0) setSelectedKelas(kelasList[0]);
   }, [lockedKelas, kelasList.length]);
 
-  // Reset status UI (bukan timestamp) saat ganti kelas/periode
   useEffect(() => { setSendStatusMap({}); }, [selectedKelas, periodeFilter]);
 
   const kelasStudents = useMemo(() =>
@@ -174,19 +144,59 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
 
   const filteredJournals = useMemo(() => {
     const base = journals.filter(j => j.className === selectedKelas);
-    if (periodeFilter === 'harian') {
-      const today = getTodayStr();
-      return base.filter(j => j.date === today);
-    }
-    if (periodeFilter === 'mingguan') {
-      const { start, end } = getWeekRange();
-      return base.filter(j => j.date >= start && j.date <= end);
-    }
-    const { start, end } = getMonthRange();
-    return base.filter(j => j.date >= start && j.date <= end);
+    if (periodeFilter === 'harian') return base.filter(j => j.date === getTodayStr());
+    if (periodeFilter === 'mingguan') { const { start, end } = getWeekRange(); return base.filter(j => j.date >= start && j.date <= end); }
+    const { start, end } = getMonthRange(); return base.filter(j => j.date >= start && j.date <= end);
   }, [journals, selectedKelas, periodeFilter]);
 
-  // ── Kontak handlers ───────────────────────────────────────────────────────
+  // ── DATA SINKRON LINTAS GURU ─────────────────────────────────────────────
+  // Ambil semua guru yang pernah mengajar di kelas ini dalam periode
+  const guruDiKelas = useMemo(() => {
+    const map: Record<string, { id: string; name: string; subjects: Set<string>; totalPertemuan: number; lastDate: string }> = {};
+    filteredJournals.forEach(j => {
+      const tid = j.teacherId ?? 'unknown';
+      if (!map[tid]) map[tid] = { id: tid, name: j.teacherName ?? tid, subjects: new Set(), totalPertemuan: 0, lastDate: j.date };
+      map[tid].subjects.add(j.subject);
+      map[tid].totalPertemuan++;
+      if (j.date > map[tid].lastDate) map[tid].lastDate = j.date;
+    });
+    return Object.values(map).map(g => ({ ...g, subjects: Array.from(g.subjects).sort() }));
+  }, [filteredJournals]);
+
+  // Rekap kehadiran per siswa per mapel (lintas guru)
+  const rekapPerMapel = useMemo(() => {
+    // Kelompokkan jurnal per mapel
+    const byMapel: Record<string, JournalEntry[]> = {};
+    filteredJournals.forEach(j => {
+      if (!byMapel[j.subject]) byMapel[j.subject] = [];
+      byMapel[j.subject].push(j);
+    });
+
+    return Object.entries(byMapel).map(([subject, jList]) => {
+      const guru = jList[0]?.teacherName ?? '-';
+      const totalPertemuan = jList.length;
+
+      const siswaData = students
+        .filter(s => s.className === selectedKelas)
+        .sort((a, b) => a.name.localeCompare(b.name, 'id'))
+        .map(s => {
+          let h = 0, sk = 0, iz = 0, alp = 0;
+          jList.forEach(j => {
+            const st = j.studentAttendance?.[s.id];
+            if (st === 'present') h++;
+            else if (st === 'sick') sk++;
+            else if (st === 'permission') iz++;
+            else if (st === 'absent') alp++;
+          });
+          const pct = totalPertemuan > 0 ? Math.round((h / totalPertemuan) * 100) : 0;
+          return { student: s, h, sk, iz, alp, pct };
+        });
+
+      return { subject, guru, totalPertemuan, siswaData };
+    }).sort((a, b) => a.subject.localeCompare(b.subject, 'id'));
+  }, [filteredJournals, students, selectedKelas]);
+
+  // ── Kontak helpers ────────────────────────────────────────────────────────
   const getEdit = (sid: string) => {
     if (editMap[sid]) return editMap[sid];
     const w = getWali(sid);
@@ -204,8 +214,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     setTimeout(() => setSavedIds(p => { const n = new Set(p); n.delete(sid); return n; }), 3000);
   };
 
-  const mapelList = useMemo(() =>
-    Array.from(new Set(filteredJournals.map(j => j.subject))).sort(), [filteredJournals]);
+  const mapelList = useMemo(() => Array.from(new Set(filteredJournals.map(j => j.subject))).sort(), [filteredJournals]);
 
   const getNilai = useCallback((sid: string, mapel: string) => {
     const vals: number[] = [];
@@ -258,15 +267,9 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     return `${sapa}\n\nBerikut rekap nilai putra/putri Bapak/Ibu di SMPN 21 Jambi:\n\n👤 Nama    : ${student.name}\n🏫 Kelas   : ${selectedKelas}\n📅 Periode : ${periodeStr()}\n\n${nilaiStr}\n\n⭐ Rata-rata : ${avg}\n\nTerima kasih atas perhatian dan kerja samanya.\n_SMPN 21 Jambi_`;
   };
 
-  // ── Cek lock helpers ──────────────────────────────────────────────────────
-  const isSentLocked = (sid: string) => {
-    const ts = sentTsMap.get(sid);
-    return !!ts && Date.now() - ts < SENT_LOCK_MS;
-  };
+  const isSentLocked  = (sid: string) => { const ts = sentTsMap.get(sid); return !!ts && Date.now() - ts < SENT_LOCK_MS; };
+  const isBulkLocked  = () => !!bulkSentTs && Date.now() - bulkSentTs < SENT_LOCK_MS;
 
-  const isBulkLocked = () => !!bulkSentTs && Date.now() - bulkSentTs < SENT_LOCK_MS;
-
-  // ── Kirim 1 siswa ─────────────────────────────────────────────────────────
   const handleSendOne = async (student: Student) => {
     const wali = getWali(student.id);
     if (!wali?.noWa) return;
@@ -275,20 +278,16 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     const pesan  = activeTab === 'kontak' ? buildPesanKehadiran(student) : buildPesanNilai(student);
     const result = await sendWhatsApp(fonnteToken, wali.noWa, pesan);
     setSendStatusMap(p => ({ ...p, [student.id]: result.success ? 'success' : 'error' }));
-    if (result.success) {
-      setSentTsMap(p => { const m = new Map<string, number>(p); m.set(student.id, Date.now()); saveSentTs(m); return m; });
-    }
+    if (result.success) setSentTsMap(p => { const m = new Map<string, number>(p); m.set(student.id, Date.now()); saveSentTs(m); return m; });
     if (!result.success) alert(`Gagal kirim ke ${student.name}: ${result.reason}`);
     setTimeout(() => setSendStatusMap(p => ({ ...p, [student.id]: 'idle' })), 4000);
   };
 
-  // ── Kirim semua ───────────────────────────────────────────────────────────
   const handleSendAll = async () => {
     if (!fonnteToken) { alert('Token Fonnte belum diatur.'); return; }
     const targets = kelasStudents.filter(s => getWali(s.id)?.noWa);
     if (!targets.length) { alert('Belum ada siswa yang memiliki No. WA orang tua.'); return; }
     if (!confirm(`Kirim laporan ${getPeriodeLabelShort(periodeFilter)} ke ${targets.length} orang tua kelas ${selectedKelas}?`)) return;
-
     setBulkStatus('sending'); setBulkResult(null);
     let ok = 0, fail = 0;
     for (const student of targets) {
@@ -306,22 +305,17 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
       }
       await new Promise(r => setTimeout(r, 1000));
     }
-
-    // Simpan timestamp kirim-semua ke localStorage
-    const now = Date.now();
-    setBulkSentTs(now);
-    saveBulkSentTs(now);
-
-    setBulkStatus('done');
-    setBulkResult({ ok, fail });
+    const now = Date.now(); setBulkSentTs(now); saveBulkSentTs(now);
+    setBulkStatus('done'); setBulkResult({ ok, fail });
     setTimeout(() => { setBulkStatus('idle'); setBulkResult(null); setSendStatusMap({}); }, 6000);
   };
 
-  const hasToken       = !!fonnteToken;
-  const studentsWithWa = kelasStudents.filter(s => getWali(s.id)?.noWa);
+  const hasToken          = !!fonnteToken;
+  const studentsWithWa    = kelasStudents.filter(s => getWali(s.id)?.noWa);
   const allStudentsWithWa = students.filter(s => getWali(s.id)?.noWa);
+  const bulkLocked        = isBulkLocked();
+  const bulkCountdown     = bulkSentTs ? formatCountdown(bulkSentTs) : '';
 
-  // ── Kirim kedisiplinan ────────────────────────────────────────────────────
   const handleSendDisiplin = async () => {
     if (!disiplinMsg.trim() || !fonnteToken) return;
     setDisiplinStatus('sending'); setDisiplinResult(null);
@@ -340,30 +334,20 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
 
   const week  = getWeekRange();
   const month = getMonthRange();
-
   const periodeOptions = [
     { id: 'harian'   as PeriodeFilter, label: 'Hari Ini',   sub: getTodayStr().split('-').reverse().join('/') },
     { id: 'mingguan' as PeriodeFilter, label: 'Minggu Ini', sub: week.label },
     { id: 'bulanan'  as PeriodeFilter, label: 'Bulan Ini',  sub: month.label },
   ];
 
-  // ── Tombol Kirim Semua (reusable) ─────────────────────────────────────────
-  const bulkLocked    = isBulkLocked();
-  const bulkCountdown = bulkSentTs ? formatCountdown(bulkSentTs) : '';
-
   const SendAllButton = () => (
-    <button
-      onClick={handleSendAll}
+    <button onClick={handleSendAll}
       disabled={!studentsWithWa.length || bulkStatus === 'sending' || bulkLocked}
       title={bulkLocked ? `Tunggu ${bulkCountdown} sebelum kirim lagi` : undefined}
-      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      {bulkStatus === 'sending'
-        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Mengirim...</>
-        : bulkLocked
-          ? <><Clock className="w-3.5 h-3.5" />Tunggu {bulkCountdown}</>
-          : <><Send className="w-3.5 h-3.5" />Kirim {getPeriodeLabelShort(periodeFilter)} ke Semua ({studentsWithWa.length})</>
-      }
+      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+      {bulkStatus === 'sending' ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Mengirim...</>
+       : bulkLocked ? <><Clock className="w-3.5 h-3.5" />Tunggu {bulkCountdown}</>
+       : <><Send className="w-3.5 h-3.5" />Kirim {getPeriodeLabelShort(periodeFilter)} ke Semua ({studentsWithWa.length})</>}
     </button>
   );
 
@@ -373,32 +357,28 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
     </div>
   );
 
-  // ── Admin: tampil Kedisiplinan saja ───────────────────────────────────────
+  // ── ADMIN VIEW ────────────────────────────────────────────────────────────
   if (isAdmin) {
     return (
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Users className="w-6 h-6 text-amber-500" />
-              Kedisiplinan Siswa
+              <Users className="w-6 h-6 text-amber-500" />Kedisiplinan Siswa
             </h2>
             <p className="text-slate-500 text-sm mt-0.5">Kirim pengumuman kedisiplinan ke semua orang tua murid.</p>
           </div>
           <button onClick={() => setShowTokenForm(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${fonnteToken ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'}`}>
-            <Settings className="w-4 h-4" />
-            {fonnteToken ? 'Fonnte ✓' : 'Atur Token WA'}
+            <Settings className="w-4 h-4" />{fonnteToken ? 'Fonnte ✓' : 'Atur Token WA'}
           </button>
         </div>
-
         {showTokenForm && (
           <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Settings className="w-4 h-4 text-indigo-500" />Pengaturan Token Fonnte</h3>
               <button onClick={() => setShowTokenForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
             </div>
-            <p className="text-xs text-slate-500">Dapatkan token di <a href="https://fonnte.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">fonnte.com</a> → Dashboard → Device → Token.</p>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <input type={showToken ? 'text' : 'password'} placeholder="Masukkan token Fonnte..." value={tokenInput} onChange={e => setTokenInput(e.target.value)} className={inputCls} />
@@ -406,14 +386,13 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <button onClick={handleSaveToken} disabled={!tokenInput.trim()} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <button onClick={handleSaveToken} disabled={!tokenInput.trim()} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50">
                 <Save className="w-3.5 h-3.5" /> Simpan
               </button>
             </div>
             {tokenSaved && <p className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Token berhasil disimpan!</p>}
           </div>
         )}
-
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 bg-amber-50 border-b border-amber-100 flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -421,65 +400,30 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             </div>
             <div>
               <p className="text-sm font-semibold text-amber-900">Pesan Kedisiplinan ke Semua Orang Tua</p>
-              <p className="text-xs text-amber-700 mt-0.5">Pesan akan dikirim ke <span className="font-bold">{allStudentsWithWa.length} orang tua</span> yang sudah terdaftar nomor WA-nya (semua kelas).</p>
+              <p className="text-xs text-amber-700 mt-0.5">Pesan akan dikirim ke <span className="font-bold">{allStudentsWithWa.length} orang tua</span> yang sudah terdaftar nomor WA-nya.</p>
             </div>
           </div>
           <div className="px-5 py-5 space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Isi Pesan Kedisiplinan</label>
-              <textarea
-                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-900 transition-colors resize-none"
-                rows={6}
-                placeholder={`Contoh:\nDiberitahukan kepada orang tua siswa bahwa akan dilaksanakan pemeriksaan kuku dan kerapian rambut pada hari Senin, 10 Maret 2026.\n\nMohon pastikan putra/putri Bapak/Ibu datang ke sekolah dalam kondisi rapi dan bersih.`}
-                value={disiplinMsg}
-                onChange={e => setDisiplinMsg(e.target.value)}
-                disabled={disiplinStatus === 'sending'}
-              />
-              <p className="text-xs text-slate-400 mt-1.5">Pesan otomatis ditambahkan salam pembuka (nama ortu), tanggal, dan tanda tangan SMPN 21 Jambi.</p>
-            </div>
+            <textarea className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-amber-500 text-slate-900 resize-none" rows={6}
+              placeholder="Isi pesan kedisiplinan..." value={disiplinMsg} onChange={e => setDisiplinMsg(e.target.value)} disabled={disiplinStatus === 'sending'} />
             <div className="flex items-center gap-3 flex-wrap">
               <button onClick={handleSendDisiplin} disabled={!disiplinMsg.trim() || disiplinStatus === 'sending' || !fonnteToken || allStudentsWithWa.length === 0}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                {disiplinStatus === 'sending'
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Mengirim ke {allStudentsWithWa.length} ortu...</>
-                  : <><Send className="w-4 h-4" />Kirim ke Semua Ortu ({allStudentsWithWa.length})</>}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 disabled:opacity-50">
+                {disiplinStatus === 'sending' ? <><Loader2 className="w-4 h-4 animate-spin" />Mengirim...</> : <><Send className="w-4 h-4" />Kirim ke Semua ({allStudentsWithWa.length})</>}
               </button>
-              {disiplinMsg.trim() && disiplinStatus === 'idle' && (
-                <button onClick={() => setDisiplinMsg('')} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Hapus pesan</button>
-              )}
             </div>
-            {!fonnteToken && (
-              <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700">
-                <X className="w-4 h-4 flex-shrink-0" />Token Fonnte belum diisi. Klik "Atur Token WA" di pojok kanan atas.
-              </div>
-            )}
-            {allStudentsWithWa.length === 0 && (
-              <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500">
-                <Users className="w-4 h-4 flex-shrink-0" />Belum ada nomor WA ortu yang terdaftar.
-              </div>
-            )}
             {disiplinResult && (
               <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm border ${disiplinResult.fail === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                <CheckCheck className="w-4 h-4 flex-shrink-0" />
-                Selesai! <span className="font-bold">{disiplinResult.ok} berhasil</span> dikirim
-                {disiplinResult.fail > 0 && <>, <span className="font-bold text-rose-600">{disiplinResult.fail} gagal</span></>}.
+                <CheckCheck className="w-4 h-4 flex-shrink-0" />Selesai! <span className="font-bold">{disiplinResult.ok} berhasil</span>{disiplinResult.fail > 0 && <>, <span className="font-bold text-rose-600">{disiplinResult.fail} gagal</span></>}
               </div>
             )}
           </div>
-          {disiplinMsg.trim() && (
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Preview Pesan</p>
-              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                {`Yth. Bapak/Ibu [Nama Ortu],\n\n📢 *Pengumuman Kedisiplinan Siswa*\n🏫 SMPN 21 Jambi\n\n${disiplinMsg.trim()}\n\nMohon perhatian dan kerja samanya.\n_SMPN 21 Jambi_`}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
-  // ── Guru biasa ────────────────────────────────────────────────────────────
+  // ── GURU WALI KELAS VIEW ──────────────────────────────────────────────────
   return (
     <div className="space-y-6">
 
@@ -487,15 +431,13 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Users className="w-6 h-6 text-indigo-500" />
-            Wali Murid
+            <Users className="w-6 h-6 text-indigo-500" />Wali Murid
           </h2>
-          <p className="text-slate-500 text-sm mt-0.5">Kelola kontak orang tua dan kirim laporan via WhatsApp.</p>
+          <p className="text-slate-500 text-sm mt-0.5">Kelola kontak orang tua dan rekap data kelas dari semua guru mapel.</p>
         </div>
         <button onClick={() => setShowTokenForm(v => !v)}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${hasToken ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'}`}>
-          <Settings className="w-4 h-4" />
-          {hasToken ? 'Fonnte ✓' : 'Atur Token WA'}
+          <Settings className="w-4 h-4" />{hasToken ? 'Fonnte ✓' : 'Atur Token WA'}
         </button>
       </div>
 
@@ -506,7 +448,6 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Settings className="w-4 h-4 text-indigo-500" />Pengaturan Token Fonnte</h3>
             <button onClick={() => setShowTokenForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
           </div>
-          <p className="text-xs text-slate-500">Dapatkan token di <a href="https://fonnte.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">fonnte.com</a> → Dashboard → Device → Token.</p>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <input type={showToken ? 'text' : 'password'} placeholder="Masukkan token Fonnte..." value={tokenInput} onChange={e => setTokenInput(e.target.value)} className={inputCls} />
@@ -514,7 +455,7 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                 {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <button onClick={handleSaveToken} disabled={!tokenInput.trim()} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            <button onClick={handleSaveToken} disabled={!tokenInput.trim()} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50">
               <Save className="w-3.5 h-3.5" /> Simpan
             </button>
           </div>
@@ -522,25 +463,29 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
         </div>
       )}
 
-      {/* Bulk result */}
       {bulkResult && (
         <div className={`px-4 py-3 rounded-xl text-sm border flex items-center gap-2 ${bulkResult.fail === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-          <CheckCheck className="w-4 h-4 flex-shrink-0" />
-          Selesai! {bulkResult.ok} berhasil dikirim{bulkResult.fail > 0 ? `, ${bulkResult.fail} gagal` : ''}.
+          <CheckCheck className="w-4 h-4 flex-shrink-0" />Selesai! {bulkResult.ok} berhasil{bulkResult.fail > 0 ? `, ${bulkResult.fail} gagal` : ''}.
         </div>
       )}
 
-      {/* Tab */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit flex-wrap">
         {([
-          { id: 'kontak', label: 'Kontak Ortu', icon: Phone },
-          { id: 'nilai',  label: 'Rekap Nilai', icon: Star },
+          { id: 'kontak',      label: 'Kontak Ortu',  icon: Phone },
+          { id: 'nilai',       label: 'Rekap Nilai',  icon: Star },
+          { id: 'rekap-kelas', label: 'Rekap Kelas',  icon: GraduationCap },
         ] as { id: ActiveTab; label: string; icon: any }[]).map(tab => {
           const Icon = tab.icon;
           return (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <Icon className="w-4 h-4" />{tab.label}
+              {tab.id === 'rekap-kelas' && guruDiKelas.length > 0 && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold">
+                  {guruDiKelas.length}
+                </span>
+              )}
             </button>
           );
         })}
@@ -589,26 +534,160 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             <span className={`font-semibold ${filteredJournals.length ? 'text-indigo-600' : 'text-slate-400'}`}>
               {filteredJournals.length} pertemuan
             </span>
+            {guruDiKelas.length > 0 && (
+              <> · <span className="font-semibold text-emerald-600">{guruDiKelas.length} guru mengajar</span></>
+            )}
           </p>
         </div>
 
-        {/* ── Tombol Kirim Semua — DI SINI (atas, dalam filter panel) ── */}
-        {studentsWithWa.length > 0 && (
+        {studentsWithWa.length > 0 && activeTab !== 'rekap-kelas' && (
           <div className="pt-1 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
             <span className="text-xs text-slate-500">
               Kirim laporan <span className="font-semibold text-indigo-600">{getPeriodeLabelShort(periodeFilter)}</span> sekarang:
-              {bulkLocked && (
-                <span className="ml-2 inline-flex items-center gap-1 text-amber-600 font-semibold">
-                  <Clock className="w-3 h-3" /> Cooldown {bulkCountdown}
-                </span>
-              )}
+              {bulkLocked && <span className="ml-2 inline-flex items-center gap-1 text-amber-600 font-semibold"><Clock className="w-3 h-3" />Cooldown {bulkCountdown}</span>}
             </span>
             <SendAllButton />
           </div>
         )}
       </div>
 
-      {/* ── TAB KONTAK ─────────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════
+          TAB: REKAP KELAS — Sinkron Otomatis dari Semua Guru Mapel
+      ════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'rekap-kelas' && (
+        <div className="space-y-5">
+
+          {/* Banner sinkron */}
+          <div className="bg-gradient-to-r from-indigo-50 to-emerald-50 border border-indigo-100 rounded-2xl px-5 py-4 flex items-start gap-3">
+            <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+              <RefreshCw className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-indigo-900">Auto-Sinkron Aktif</p>
+              <p className="text-xs text-indigo-700 mt-0.5">
+                Data kehadiran & nilai di bawah dikumpulkan otomatis dari <strong>{guruDiKelas.length} guru mapel</strong> yang mengajar di kelas <strong>{selectedKelas}</strong>.
+                Setiap kali guru mapel menyimpan jurnal, data langsung terefleksi di sini.
+              </p>
+            </div>
+          </div>
+
+          {/* Kartu guru yang mengajar */}
+          {guruDiKelas.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+              <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">Belum ada jurnal dari guru mapel untuk periode ini.</p>
+              <p className="text-slate-400 text-sm mt-1">Coba ganti periode ke "Bulan Ini".</p>
+            </div>
+          ) : (
+            <>
+              {/* Daftar guru yang mengajar di kelas ini */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-slate-400" />Guru Mapel di Kelas {selectedKelas}
+                  <span className="text-xs font-normal text-slate-400 lowercase">({getPeriodeLabelShort(periodeFilter)})</span>
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {guruDiKelas.map(g => (
+                    <div key={g.id} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-start gap-3 shadow-sm">
+                      <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm uppercase flex-shrink-0">
+                        {g.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{g.name}</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {g.subjects.map(s => (
+                            <span key={s} className="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-full border border-indigo-100">{s}</span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">{g.totalPertemuan} pertemuan · terakhir {g.lastDate.split('-').reverse().join('/')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rekap kehadiran per mapel */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <Users className="w-4 h-4 text-slate-400" />Rekap Kehadiran per Mata Pelajaran
+                </h3>
+                {rekapPerMapel.map(({ subject, guru, totalPertemuan, siswaData }) => (
+                  <div key={subject} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {/* Header mapel */}
+                    <div className="flex items-center justify-between px-5 py-3 bg-indigo-50 border-b border-indigo-100">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-indigo-600" />
+                        <span className="text-sm font-bold text-indigo-800">{subject}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-indigo-500">Guru:</span>
+                        <span className="font-semibold text-indigo-700">{guru}</span>
+                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full font-bold">{totalPertemuan} pertemuan</span>
+                      </div>
+                    </div>
+
+                    {/* Tabel siswa */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100">
+                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nama Siswa</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-emerald-600 uppercase tracking-wider">H</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-amber-600 uppercase tracking-wider">S</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-blue-600 uppercase tracking-wider">I</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-rose-600 uppercase tracking-wider">A</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">%</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {siswaData.map((row, idx) => (
+                            <tr key={row.student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                              <td className="px-4 py-2.5">
+                                <p className="text-sm font-medium text-slate-900">{row.student.name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">{row.student.nis}</p>
+                              </td>
+                              <td className="px-3 py-2.5 text-center font-bold text-emerald-700 text-sm">{row.h}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-amber-600 text-sm">{row.sk}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-blue-600 text-sm">{row.iz}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-rose-600 text-sm">{row.alp}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  row.pct >= 75 ? 'bg-emerald-100 text-emerald-700' :
+                                  row.pct >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                                }`}>{row.pct}%</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {/* Footer rata-rata kelas per mapel ini */}
+                        <tfoot>
+                          <tr className="bg-indigo-50 border-t border-indigo-100">
+                            <td className="px-4 py-2 text-[10px] font-bold text-indigo-700 uppercase">Rata-rata Kelas</td>
+                            {(['h','sk','iz','alp'] as const).map(key => {
+                              const total = siswaData.reduce((a, r) => a + r[key], 0);
+                              return <td key={key} className="px-3 py-2 text-center text-xs font-bold text-indigo-600">{total}</td>;
+                            })}
+                            <td className="px-3 py-2 text-center">
+                              {(() => {
+                                const avg = siswaData.length > 0
+                                  ? Math.round(siswaData.reduce((a, r) => a + r.pct, 0) / siswaData.length)
+                                  : 0;
+                                return <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${avg >= 75 ? 'bg-emerald-100 text-emerald-700' : avg >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{avg}%</span>;
+                              })()}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB KONTAK ─────────────────────────────────────────────── */}
       {activeTab === 'kontak' && (
         !kelasStudents.length ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
@@ -644,13 +723,9 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {isSent && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                            <CheckCheck className="w-3 h-3" /> Terkirim · {countdown}
-                          </span>
-                        )}
-                        {hasWa && !isDirty && !saved && !isSent && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" /> Tersimpan</span>}
-                        {saved && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 animate-pulse"><CheckCircle2 className="w-3 h-3" /> Disimpan!</span>}
+                        {isSent && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200"><CheckCheck className="w-3 h-3" />Terkirim · {countdown}</span>}
+                        {hasWa && !isDirty && !saved && !isSent && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" />Tersimpan</span>}
+                        {saved && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 animate-pulse"><CheckCircle2 className="w-3 h-3" />Disimpan!</span>}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
@@ -666,38 +741,34 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                         </div>
                       </div>
                       <button onClick={() => handleSave(student.id)} disabled={!isDirty}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
-                        <Save className="w-3.5 h-3.5" /> Simpan
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+                        <Save className="w-3.5 h-3.5" />Simpan
                       </button>
                       <button onClick={() => handleSendOne(student)}
                         disabled={!hasWa || isSent || status === 'sending' || bulkStatus === 'sending'}
                         title={!hasWa ? 'No. WA belum diisi' : isSent ? `Terkirim, tunggu ${countdown}` : `Kirim rekap ${getPeriodeLabelShort(periodeFilter)}`}
                         className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors ${
-                          isSent               ? 'bg-blue-500 text-white cursor-not-allowed' :
-                          status === 'error'   ? 'bg-rose-500 text-white' :
+                          isSent ? 'bg-blue-500 text-white cursor-not-allowed' :
+                          status === 'error' ? 'bg-rose-500 text-white' :
                           status === 'sending' ? 'bg-slate-200 text-slate-400 cursor-not-allowed' :
-                          hasWa ? 'bg-emerald-600 text-white hover:bg-emerald-700' :
-                          'bg-slate-100 text-slate-300 cursor-not-allowed'
+                          hasWa ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                         }`}>
-                        {status === 'sending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                         isSent               ? <CheckCheck className="w-4 h-4" /> :
-                         <Send className="w-4 h-4" />}
+                        {status === 'sending' ? <Loader2 className="w-4 h-4 animate-spin" /> : isSent ? <CheckCheck className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
                 );
               })}
             </div>
-            {/* Footer tabel — tombol kirim semua juga di sini (bawah) sebagai shortcut */}
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
-              <p className="text-xs text-slate-500"><span className="font-bold text-emerald-700">{studentsWithWa.length}</span>/{kelasStudents.length} siswa sudah ada No. WA ortu</p>
+              <p className="text-xs text-slate-500"><span className="font-bold text-emerald-700">{studentsWithWa.length}</span>/{kelasStudents.length} siswa sudah ada No. WA</p>
               <SendAllButton />
             </div>
           </div>
         )
       )}
 
-      {/* ── TAB REKAP NILAI ──────────────────────────────────────────── */}
+      {/* ── TAB REKAP NILAI ─────────────────────────────────────────── */}
       {activeTab === 'nilai' && (
         !kelasStudents.length ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
@@ -708,9 +779,6 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
           <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
             <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-medium">Belum ada jurnal untuk periode ini.</p>
-            <p className="text-slate-400 text-sm mt-1">
-              {periodeFilter !== 'bulanan' ? 'Coba ganti ke "Bulan Ini" atau pastikan ada jurnal di periode ini.' : 'Guru perlu input nilai di menu Penilaian terlebih dahulu.'}
-            </p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -720,14 +788,14 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                   <tr className="bg-indigo-700">
                     <th className="px-3 py-3 text-[10px] font-bold text-white uppercase tracking-wider sticky left-0 bg-indigo-700 w-8 text-left">No</th>
                     <th className="px-3 py-3 text-[10px] font-bold text-white uppercase tracking-wider sticky left-8 bg-indigo-700 min-w-[160px] text-left">Nama Siswa</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-emerald-300 uppercase tracking-wider text-center whitespace-nowrap">H</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-amber-300 uppercase tracking-wider text-center whitespace-nowrap">S</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-blue-300 uppercase tracking-wider text-center whitespace-nowrap">I</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-rose-300 uppercase tracking-wider text-center whitespace-nowrap">A</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-indigo-200 uppercase tracking-wider text-center whitespace-nowrap">% Hadir</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-emerald-300 uppercase tracking-wider text-center">H</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-amber-300 uppercase tracking-wider text-center">S</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-blue-300 uppercase tracking-wider text-center">I</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-rose-300 uppercase tracking-wider text-center">A</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-indigo-200 uppercase tracking-wider text-center">%</th>
                     {mapelList.map(m => <th key={m} className="px-3 py-3 text-[10px] font-bold text-white uppercase tracking-wider text-center min-w-[80px]">{m}</th>)}
-                    <th className="px-3 py-3 text-[10px] font-bold text-amber-300 uppercase tracking-wider text-center min-w-[80px] whitespace-nowrap">Rata-rata</th>
-                    <th className="px-3 py-3 text-[10px] font-bold text-emerald-300 uppercase tracking-wider text-center whitespace-nowrap">Kirim WA</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-amber-300 uppercase tracking-wider text-center min-w-[80px]">Rata-rata</th>
+                    <th className="px-3 py-3 text-[10px] font-bold text-emerald-300 uppercase tracking-wider text-center">Kirim</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -768,15 +836,12 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
                             disabled={!hasWa || isSent || status === 'sending' || bulkStatus === 'sending'}
                             title={!hasWa ? 'No. WA belum diisi' : isSent ? `Tunggu ${countdown}` : `Kirim laporan ${getPeriodeLabelShort(periodeFilter)}`}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-                              isSent               ? 'bg-blue-500 text-white cursor-not-allowed' :
-                              status === 'error'   ? 'bg-rose-500 text-white' :
+                              isSent ? 'bg-blue-500 text-white cursor-not-allowed' :
+                              status === 'error' ? 'bg-rose-500 text-white' :
                               status === 'sending' ? 'bg-slate-200 text-slate-400 cursor-not-allowed' :
-                              hasWa ? 'bg-emerald-600 text-white hover:bg-emerald-700' :
-                              'bg-slate-100 text-slate-300 cursor-not-allowed'
+                              hasWa ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                             }`}>
-                            {status === 'sending' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
-                             isSent               ? <CheckCheck className="w-3.5 h-3.5" /> :
-                             <Send className="w-3.5 h-3.5" />}
+                            {status === 'sending' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isSent ? <CheckCheck className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
                           </button>
                         </td>
                       </tr>
