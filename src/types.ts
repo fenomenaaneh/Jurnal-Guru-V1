@@ -17,13 +17,16 @@ export type JournalEntry = {
   photoUrl?: string;
   teacherId?: string;
   teacherName?: string;
-  grades?: Record<string, string>; // studentId -> nilai (string angka 0-100)
+  grades?: Record<string, string>;
 };
+
+export type Role = 'admin' | 'guru';
 
 export type User = {
   id: string;
   name: string;
   username: string;
   password: string;
-  role: 'admin' | 'guru';
+  role: Role;
+  waliKelas?: string; // nama kelas yang diampu sebagai wali kelas, opsional
 };

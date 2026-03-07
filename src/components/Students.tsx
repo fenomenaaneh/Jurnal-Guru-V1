@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { Student } from '../hooks/useStudents';
 import {
   Users, Plus, Trash2, Pencil, X, Check, Upload,
@@ -22,15 +23,12 @@ export function Students({
 
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-
   const [addForm, setAddForm] = useState<EditForm>({ name: '', nis: '', className: '' });
   const [addError, setAddError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ name: '', nis: '', className: '' });
   const [editError, setEditError] = useState('');
-
   const [importResult, setImportResult] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -79,34 +77,97 @@ export function Students({
     setEditError('');
   };
 
-  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ── CSV parser ─────────────────────────────────────────────────────────────
+  const parseCSV = (text: string) => {
+    const clean = text.replace(/^\uFEFF/, '');
+    const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+    const imported: Omit<Student, 'id'>[] = [];
+    let skipped = 0;
+    const startIdx = isNaN(Number(lines[0]?.split(',')[0]?.trim())) ? 1 : 0;
+    for (let i = startIdx; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+      let nis = '', name = '', className = '';
+      if (cols.length >= 4)       { [, nis, name, className] = cols; }
+      else if (cols.length === 3) { [nis, name, className] = cols; }
+      else { skipped++; continue; }
+      if (name && nis && className) { imported.push({ name, nis, className }); }
+      else { skipped++; }
+    }
+    if (imported.length > 0) {
+      onAddStudents(imported);
+      setImportResult(`✓ ${imported.length} siswa berhasil diimport${skipped > 0 ? `, ${skipped} baris dilewati` : ''}.`);
+    } else {
+      setImportResult('⚠ Tidak ada data valid. Format: NIS, Nama, Kelas.');
+    }
+    setTimeout(() => setImportResult(null), 5000);
+  };
+
+  // ── Excel parser ───────────────────────────────────────────────────────────
+  const parseExcel = (file: File) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-      const imported: Omit<Student, 'id'>[] = [];
-      let skipped = 0;
-      const startIdx = isNaN(Number(lines[0]?.split(',')[0]?.trim())) ? 1 : 0;
-      for (let i = startIdx; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
-        let nis = '', name = '', className = '';
-        if (cols.length >= 4)      { [, nis, name, className] = cols; }
-        else if (cols.length === 3) { [nis, name, className] = cols; }
-        else { skipped++; continue; }
-        if (name && nis && className) { imported.push({ name, nis, className }); }
-        else { skipped++; }
-      }
-      if (imported.length > 0) {
-        onAddStudents(imported);
-        setImportResult(`✓ ${imported.length} siswa berhasil diimport${skipped > 0 ? `, ${skipped} baris dilewati` : ''}.`);
-      } else {
-        setImportResult(`⚠ Tidak ada data valid. Format: NIS, Nama, Kelas.`);
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+        const imported: Omit<Student, 'id'>[] = [];
+        let skipped = 0;
+        const startIdx = isNaN(Number(String(rows[0]?.[0]).trim())) ? 1 : 0;
+
+        for (let i = startIdx; i < rows.length; i++) {
+          const cols = rows[i].map(c => String(c ?? '').trim());
+          let nis = '', name = '', className = '';
+          if (cols.length >= 4)       { [, nis, name, className] = cols; }
+          else if (cols.length === 3) { [nis, name, className] = cols; }
+          else { skipped++; continue; }
+          if (name && nis && className) {
+            imported.push({ name, nis, className });
+          } else {
+            skipped++;
+          }
+        }
+
+        if (imported.length > 0) {
+          onAddStudents(imported);
+          setImportResult(`✓ ${imported.length} siswa berhasil diimport dari Excel${skipped > 0 ? `, ${skipped} baris dilewati` : ''}.`);
+        } else {
+          setImportResult('⚠ Tidak ada data valid. Format kolom: NIS, Nama, Kelas (atau No, NIS, Nama, Kelas).');
+        }
+      } catch {
+        setImportResult('⚠ Gagal membaca file Excel. Pastikan format file benar.');
       }
       setTimeout(() => setImportResult(null), 5000);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ── Handler utama import ───────────────────────────────────────────────────
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      parseExcel(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        if (text.includes('\uFFFD')) {
+          const reader2 = new FileReader();
+          reader2.onload = (ev2) => parseCSV(ev2.target?.result as string);
+          reader2.readAsText(file, 'windows-1252');
+          return;
+        }
+        parseCSV(text);
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
     e.target.value = '';
   };
 
@@ -127,8 +188,8 @@ export function Students({
         <div className="flex gap-2 flex-wrap">
           <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 cursor-pointer transition-colors shadow-sm">
             <Upload className="w-4 h-4" />
-            Import CSV
-            <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCSVImport} />
+            Import Excel / CSV
+            <input type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden" onChange={handleFileImport} />
           </label>
           <button
             onClick={() => setShowAddForm(v => !v)}
@@ -141,7 +202,11 @@ export function Students({
       </div>
 
       {importResult && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
+        <div className={`px-4 py-3 rounded-xl text-sm border ${
+          importResult.startsWith('✓')
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            : 'bg-amber-50 border-amber-200 text-amber-700'
+        }`}>
           {importResult}
         </div>
       )}
@@ -200,7 +265,7 @@ export function Students({
           <p className="text-slate-500 font-medium">
             {students.length === 0 ? 'Belum ada data siswa.' : 'Tidak ada hasil pencarian.'}
           </p>
-          {students.length === 0 && <p className="text-slate-400 text-sm mt-1">Klik "Tambah Siswa" atau import CSV.</p>}
+          {students.length === 0 && <p className="text-slate-400 text-sm mt-1">Klik "Tambah Siswa" atau import file Excel/CSV.</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -255,7 +320,6 @@ export function Students({
                           return (
                             <tr key={student.id} className={`transition-colors ${isEditing ? 'bg-indigo-50/60' : 'hover:bg-slate-50/50'}`}>
                               <td className="px-4 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
-
                               {isEditing ? (
                                 <>
                                   <td className="px-3 py-2">
@@ -302,12 +366,10 @@ export function Students({
                                   <td className="px-4 py-2.5 text-slate-500">{student.className}</td>
                                   <td className="px-4 py-2.5">
                                     <div className="flex items-center justify-center gap-1.5">
-                                      {/* Tombol Edit */}
                                       <button onClick={() => startEdit(student)}
                                         className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit siswa">
                                         <Pencil className="w-3.5 h-3.5" />
                                       </button>
-                                      {/* Tombol Hapus */}
                                       <button
                                         onClick={() => { if (confirm(`Hapus ${student.name}?`)) onDelete(student.id); }}
                                         className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus siswa">
@@ -330,11 +392,12 @@ export function Students({
         </div>
       )}
 
-      {/* Info CSV */}
+      {/* Info format */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 space-y-1">
-        <p className="font-semibold text-slate-600">Format Import CSV:</p>
+        <p className="font-semibold text-slate-600">Format Import Excel / CSV:</p>
         <p>Kolom: <code className="bg-white px-1 rounded border border-slate-200">NIS, Nama, Kelas</code> atau <code className="bg-white px-1 rounded border border-slate-200">No, NIS, Nama, Kelas</code></p>
         <p>Baris pertama boleh header, akan diabaikan otomatis.</p>
+        <p className="text-slate-400">💡 Bisa langsung upload file <strong className="text-slate-500">.xlsx</strong> dari Excel tanpa perlu save as CSV.</p>
       </div>
     </div>
   );

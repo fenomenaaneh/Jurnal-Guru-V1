@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { WaliMurid } from './components/WaliMurid';
 import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -49,6 +50,16 @@ export default function App() {
       setActiveTab(user.role === 'admin' ? 'admin-dashboard' : 'dashboard');
     }
   }, [user]);
+
+  // Sync user dari users list (agar perubahan waliKelas oleh admin langsung terefleksi)
+  useEffect(() => {
+    if (user && users.length > 0) {
+      const updated = users.find(u => u.id === user.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(user)) {
+        setUser(updated);
+      }
+    }
+  }, [users]);
 
   const classes = Array.from(new Set(students.map(s => s.className))).sort() as string[];
 
@@ -151,6 +162,15 @@ export default function App() {
           {activeTab === 'history' && (
             <History journals={guruJournals} onDelete={deleteJournal} />
           )}
+          {/* Wali Murid — hanya muncul jika guru punya waliKelas */}
+          {activeTab === 'wali-murid' && user.waliKelas && (
+            <WaliMurid
+              students={students}
+              journals={journals}
+              lockedKelas={user.waliKelas}
+              isAdmin={false}
+            />
+          )}
         </>
       )}
 
@@ -195,9 +215,18 @@ export default function App() {
           {activeTab === 'tugas' && (
             <Tugas users={users} students={students} />
           )}
+          {/* Wali Murid untuk admin — dengan tab Kedisiplinan */}
+          {activeTab === 'wali-murid' && (
+            <WaliMurid
+              students={students}
+              journals={journals}
+              isAdmin={true}
+            />
+          )}
           {activeTab === 'akun' && (
             <Akun
               users={users}
+              classes={classes}
               onAdd={addUser}
               onUpdate={updateUser}
               onDelete={deleteUser}
