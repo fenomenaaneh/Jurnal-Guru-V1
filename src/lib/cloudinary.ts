@@ -1,5 +1,5 @@
 /**
- * Upload foto ke Cloudinary melalui Netlify serverless function.
+ * Upload foto ke Cloudinary melalui Vercel serverless function.
  * API secret tetap aman di server — tidak pernah exposed ke browser.
  */
 export async function uploadPhoto(file: File): Promise<string> {
@@ -17,8 +17,8 @@ export async function uploadPhoto(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 
-  // Kirim ke Netlify function
-  const response = await fetch('/.netlify/functions/upload-photo', {
+  // Kirim ke Vercel function
+  const response = await fetch('/api/upload-photo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ file: base64 }),
