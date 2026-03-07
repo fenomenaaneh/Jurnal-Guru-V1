@@ -684,32 +684,6 @@ export function WaliMurid({ students, journals, lockedKelas, isAdmin = false }: 
             </div>
           ) : (
             <>
-              {/* Daftar guru */}
-              <div>
-                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-slate-400" />Guru Mapel di Kelas {selectedKelas}
-                  <span className="text-xs font-normal text-slate-400 lowercase">({getPeriodeLabelShort(periodeFilter)})</span>
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {guruDiKelas.map(g => (
-                    <div key={g.id} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-start gap-3 shadow-sm">
-                      <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm uppercase flex-shrink-0">
-                        {g.name.charAt(0)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{g.name}</p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {g.subjects.map(s => (
-                            <span key={s} className="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-full border border-indigo-100">{s}</span>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">{g.totalPertemuan} pertemuan · terakhir {g.lastDate.split('-').reverse().join('/')}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* ── Rekap Kehadiran: sub-tab Harian / Mingguan / Bulanan ── */}
               <div className="space-y-3">
                 {/* Header + sub-tab switcher */}
