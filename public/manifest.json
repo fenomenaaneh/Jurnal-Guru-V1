@@ -1,7 +1,7 @@
 {
   "name": "Jurnal Guru",
   "short_name": "Jurnal Guru",
-  "description": "Aplikasi pencatatan jurnal kegiatan guru",
+  "description": "Aplikasi jurnal kegiatan guru",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
