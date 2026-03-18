@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.vercel.jurnal_guru_v1_blue.twa",
+    "sha256_cert_fingerprints": ["34:FC:0E:C9:E0:B7:5C:82:B8:12:95:40:9C:05:12:A5:08:D0:37:3D:CD:44:80:4A:9B:F9:C6:5A:25:70:52:5A"]
+  }
+}]
